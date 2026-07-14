@@ -299,17 +299,117 @@
 
     <!-- P2P 系統核心整合程式碼 -->
     <script>
-        // --- 安全過濾函式 (防止 XSS 惡意指令注入) ---
         function escapeHtml(string) {
             return String(string).replace(/[&<>"']/g, function (s) {
-                return {
-                    "&": "&amp;",
-                    "<": "&lt;",
-                    ">": "&gt;",
-                    '"': '&quot;',
-                    "'": '&#39;'
-                }[s];
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': '&quot;', "'": '&#39;' }[s];
             });
+        }
+
+        let viewRole = 'host';
+        let currentTheme = 'modern';
+        let topic = '今天的心情如何？用三個詞形容！';
+        let isLocked = false;
+        let wordsMap = {};
+        let peerInstance = null;
+        let p2pConnections = [];
+        let clientConn = null;
+
+        // 加強版：多重 ICE/TURN 伺服器配置，應對嚴格防火牆
+        const iceConfig = {
+            config: {
+                'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+                ]
+            }
+        };
+
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomId = urlParams.get('room');
+
+            if (urlParams.get('view') === 'input' && roomId) {
+                viewRole = 'input';
+                document.getElementById('user-layout').classList.remove('hidden');
+                document.getElementById('host-header').classList.add('hidden');
+                initClientPeer(roomId);
+            } else {
+                viewRole = 'host';
+                document.getElementById('host-layout').classList.remove('hidden');
+                initHostPeer();
+            }
+        };
+
+        function initHostPeer() {
+            peerInstance = new Peer(undefined, iceConfig);
+
+            peerInstance.on('open', (id) => {
+                const currentUrl = window.location.href.split('?')[0];
+                const inviteUrl = `${currentUrl}?view=input&room=${id}`;
+                
+                document.getElementById('share-link-input').value = inviteUrl;
+                
+                const qrcodeContainer = document.getElementById('qrcode');
+                qrcodeContainer.innerHTML = '';
+                new QRCode(qrcodeContainer, { text: inviteUrl, width: 180, height: 180 });
+
+                document.getElementById('status-text').innerText = `連線就緒 (ID: ${id.substring(0, 4)})`;
+                setupHostView();
+            });
+
+            peerInstance.on('connection', (conn) => {
+                p2pConnections.push(conn);
+                conn.on('open', () => {
+                    conn.send({ type: 'sync', topic, theme: currentTheme, isLocked });
+                });
+                conn.on('data', (data) => {
+                    if (data.type === 'submit' && !isLocked) {
+                        data.words.forEach(w => {
+                            const sw = escapeHtml(w.trim().substring(0, 15));
+                            if (sw) wordsMap[sw] = (wordsMap[sw] || 0) + 1;
+                        });
+                        renderWordsList(); renderWordCloud();
+                    }
+                });
+            });
+        }
+
+        function initClientPeer(roomId) {
+            if (peerInstance) peerInstance.destroy();
+            peerInstance = new Peer(undefined, iceConfig);
+
+            peerInstance.on('open', () => {
+                clientConn = peerInstance.connect(roomId);
+                
+                // 設定連線逾時檢測
+                const connectionTimeout = setTimeout(() => {
+                    if (!clientConn.open) {
+                        showToast("連線逾時，網路環境可能封鎖 P2P！", "error");
+                        addManualReconnectButton(roomId);
+                    }
+                }, 8000);
+
+                clientConn.on('open', () => {
+                    clearTimeout(connectionTimeout);
+                    const badge = document.getElementById('user-status-badge');
+                    badge.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>連線成功！`;
+                    setupUserView();
+                });
+
+                clientConn.on('data', (data) => { if (data.type === 'sync') handleConfigUpdate(data); });
+            });
+
+            peerInstance.on('error', (err) => {
+                showToast("連線錯誤: " + err.type, "error");
+                addManualReconnectButton(roomId);
+            });
+        }
+
+        function addManualReconnectButton(roomId) {
+            const badge = document.getElementById('user-status-badge');
+            badge.innerHTML = `<button onclick="window.location.reload()" class="underline font-bold">點擊重試連線</button>`;
         }
 
         // --- 全域變數與系統狀態 ---
@@ -1121,7 +1221,7 @@
                 toast.classList.add('translate-y-20', 'opacity-0');
                 toast.classList.remove('translate-y-0', 'opacity-100');
             }, 3500);
-        }
+        // (保持原有的 renderWordsList, handleConfigUpdate 等函式)
     </script>
 </body>
 </html>
