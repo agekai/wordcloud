@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>互動即時文字雲 (P2P 高穿透安全版)</title>
+    <title>互動即時文字雲 (P2P 安全免設定版)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
@@ -12,9 +12,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <!-- WordCloud2.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
-    <!-- QRCode.js CDN (Client-side QRCode Generator) -->
+    <!-- QRCode.js CDN 用於生成現場安全 P2P 掃描二維碼 -->
     <script src="https://cdn.jsdelivr.net/npm/davidshimjs-qrcodejs@0.0.2/qrcode.min.js"></script>
-    <!-- PeerJS CDN (WebRTC P2P Client) -->
+    <!-- PeerJS CDN 用於端到端加密 P2P 高速低延遲同步連線 -->
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     
     <style>
@@ -69,8 +69,8 @@
                 <i class="fa-solid fa-cloud-word text-xl animate-pulse"></i>
             </div>
             <div>
-                <h1 class="font-bold text-xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">即時互動文字雲 <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold ml-1">P2P 穿透版</span></h1>
-                <p class="text-xs text-slate-400">P2P Secure Real-time Interactive Word Cloud</p>
+                <h1 class="font-bold text-xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">即時互動文字雲 <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold ml-1">P2P 安全版</span></h1>
+                <p class="text-xs text-slate-400">P2P Real-time Secured Interactive Word Cloud</p>
             </div>
         </div>
         
@@ -299,117 +299,17 @@
 
     <!-- P2P 系統核心整合程式碼 -->
     <script>
+        // --- 安全過濾函式 (防止 XSS 惡意指令注入) ---
         function escapeHtml(string) {
             return String(string).replace(/[&<>"']/g, function (s) {
-                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': '&quot;', "'": '&#39;' }[s];
+                return {
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[s];
             });
-        }
-
-        let viewRole = 'host';
-        let currentTheme = 'modern';
-        let topic = '今天的心情如何？用三個詞形容！';
-        let isLocked = false;
-        let wordsMap = {};
-        let peerInstance = null;
-        let p2pConnections = [];
-        let clientConn = null;
-
-        // 加強版：多重 ICE/TURN 伺服器配置，應對嚴格防火牆
-        const iceConfig = {
-            config: {
-                'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
-                ]
-            }
-        };
-
-        window.onload = function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const roomId = urlParams.get('room');
-
-            if (urlParams.get('view') === 'input' && roomId) {
-                viewRole = 'input';
-                document.getElementById('user-layout').classList.remove('hidden');
-                document.getElementById('host-header').classList.add('hidden');
-                initClientPeer(roomId);
-            } else {
-                viewRole = 'host';
-                document.getElementById('host-layout').classList.remove('hidden');
-                initHostPeer();
-            }
-        };
-
-        function initHostPeer() {
-            peerInstance = new Peer(undefined, iceConfig);
-
-            peerInstance.on('open', (id) => {
-                const currentUrl = window.location.href.split('?')[0];
-                const inviteUrl = `${currentUrl}?view=input&room=${id}`;
-                
-                document.getElementById('share-link-input').value = inviteUrl;
-                
-                const qrcodeContainer = document.getElementById('qrcode');
-                qrcodeContainer.innerHTML = '';
-                new QRCode(qrcodeContainer, { text: inviteUrl, width: 180, height: 180 });
-
-                document.getElementById('status-text').innerText = `連線就緒 (ID: ${id.substring(0, 4)})`;
-                setupHostView();
-            });
-
-            peerInstance.on('connection', (conn) => {
-                p2pConnections.push(conn);
-                conn.on('open', () => {
-                    conn.send({ type: 'sync', topic, theme: currentTheme, isLocked });
-                });
-                conn.on('data', (data) => {
-                    if (data.type === 'submit' && !isLocked) {
-                        data.words.forEach(w => {
-                            const sw = escapeHtml(w.trim().substring(0, 15));
-                            if (sw) wordsMap[sw] = (wordsMap[sw] || 0) + 1;
-                        });
-                        renderWordsList(); renderWordCloud();
-                    }
-                });
-            });
-        }
-
-        function initClientPeer(roomId) {
-            if (peerInstance) peerInstance.destroy();
-            peerInstance = new Peer(undefined, iceConfig);
-
-            peerInstance.on('open', () => {
-                clientConn = peerInstance.connect(roomId);
-                
-                // 設定連線逾時檢測
-                const connectionTimeout = setTimeout(() => {
-                    if (!clientConn.open) {
-                        showToast("連線逾時，網路環境可能封鎖 P2P！", "error");
-                        addManualReconnectButton(roomId);
-                    }
-                }, 8000);
-
-                clientConn.on('open', () => {
-                    clearTimeout(connectionTimeout);
-                    const badge = document.getElementById('user-status-badge');
-                    badge.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>連線成功！`;
-                    setupUserView();
-                });
-
-                clientConn.on('data', (data) => { if (data.type === 'sync') handleConfigUpdate(data); });
-            });
-
-            peerInstance.on('error', (err) => {
-                showToast("連線錯誤: " + err.type, "error");
-                addManualReconnectButton(roomId);
-            });
-        }
-
-        function addManualReconnectButton(roomId) {
-            const badge = document.getElementById('user-status-badge');
-            badge.innerHTML = `<button onclick="window.location.reload()" class="underline font-bold">點擊重試連線</button>`;
         }
 
         // --- 全域變數與系統狀態 ---
@@ -419,31 +319,10 @@
         let isLocked = false;
         let wordsMap = {}; // 字詞與權重對應表
 
-        // --- P2P 連線變數與防禦防火牆的 ICE / TURN 配置 ---
+        // --- P2P 連線變數 ---
         let peerInstance = null;
         let p2pConnections = []; // 主辦端存儲所有連進來的手機端 connection
         let clientConn = null;   // 手機端用來儲存與主辦端的單一 connection
-
-        // 免費高穿透率 WebRTC ICE 伺服器群
-        const iceConfig = {
-            config: {
-                'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
-                    // 使用 Metered 提供的公開免費 TURN 加密中繼服務，確保 4G/5G 訊號強制接通
-                    {
-                        urls: 'turn:openrelay.metered.ca:443',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:80',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    }
-                ]
-            }
-        };
 
         // --- 粒子特效變數 ---
         let hostParticleId = null;
@@ -498,8 +377,8 @@
         // 📡 P2P 核心邏輯 - 主辦端 (Host)
         // ==========================================
         function initHostPeer() {
-            // 初始化 Peer 實例並帶入 TURN / STUN 配置
-            peerInstance = new Peer(undefined, iceConfig);
+            // 初始化 Peer 實例（使用安全穩定的 PeerJS 預設 Signaling 伺服器）
+            peerInstance = new Peer();
 
             peerInstance.on('open', (id) => {
                 const currentUrl = window.location.href.split('?')[0];
@@ -507,7 +386,7 @@
                 
                 document.getElementById('share-link-input').value = inviteUrl;
                 
-                // 本地繪製二維碼
+                // 本地渲染安全二維碼，絕無資料外洩給外部 API 的疑慮
                 const qrcodeContainer = document.getElementById('qrcode');
                 qrcodeContainer.innerHTML = '';
                 new QRCode(qrcodeContainer, {
@@ -530,7 +409,7 @@
                 p2pConnections.push(conn);
 
                 conn.on('open', () => {
-                    // 推送初始化主題、風格與狀態給觀眾
+                    // 主辦端向手機推送當前的題目、主題與鎖定設定
                     conn.send({
                         type: 'sync',
                         topic: topic,
@@ -539,11 +418,12 @@
                     });
                 });
 
-                // 接收作答資料
+                // 接收並處理手機端傳來的作答資料
                 conn.on('data', (data) => {
                     if (data.type === 'submit' && !isLocked) {
                         if (data.words && Array.isArray(data.words)) {
                             data.words.forEach(word => {
+                                // 限制字元長度並實施安全 XSS 過濾
                                 const sanitizedWord = escapeHtml(word.trim().substring(0, 15));
                                 if (sanitizedWord) {
                                     wordsMap[sanitizedWord] = (wordsMap[sanitizedWord] || 0) + 1;
@@ -551,7 +431,7 @@
                             });
                             renderWordsList();
                             renderWordCloud();
-                            showToast("成功接獲並飛入觀眾的新想法！", "success");
+                            showToast("已成功接獲並飛入觀眾的全新想法！", "success");
                         }
                     }
                 });
@@ -563,7 +443,7 @@
 
             peerInstance.on('error', (err) => {
                 console.error("主辦端連線錯誤：", err);
-                showToast("信號連線異常，請重新整理網頁！", "error");
+                showToast("信號連線異常，請重新整理網頁試試！", "error");
             });
         }
 
@@ -586,7 +466,7 @@
         // 📡 P2P 核心邏輯 - 手機觀眾端 (Client)
         // ==========================================
         function initClientPeer(roomId) {
-            peerInstance = new Peer(undefined, iceConfig);
+            peerInstance = new Peer();
 
             peerInstance.on('open', () => {
                 // 連接至大螢幕的專屬 Room ID
@@ -641,7 +521,7 @@
                 const input = document.getElementById('share-link-input');
                 input.select();
                 document.execCommand('copy');
-                showToast("專屬同步連結已複製！", "success");
+                showToast("專屬同步連結已複製，可傳送給他人！", "success");
             });
 
             // 風格主題切換
@@ -935,7 +815,7 @@
             handleConfigUpdate({ topic, theme: currentTheme, isLocked });
             renderWordsList();
             renderWordCloud();
-            showToast("樣品資料載入完成！已同步至所有觀眾手機！", "success");
+            showToast("樣品資料載入完成！並已即時同步到所有觀眾手機！", "success");
         }
 
         // ==========================================
@@ -1221,7 +1101,7 @@
                 toast.classList.add('translate-y-20', 'opacity-0');
                 toast.classList.remove('translate-y-0', 'opacity-100');
             }, 3500);
-        // (保持原有的 renderWordsList, handleConfigUpdate 等函式)
+        }
     </script>
 </body>
 </html>
