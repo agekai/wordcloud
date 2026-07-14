@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>互動即時文字雲 (雙端雲端同步版)</title>
+    <title>互動即時文字雲 (WebRTC 免設定同步版)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2 family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <!-- WordCloud2.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
     <!-- QRCode.js CDN 用於生成現場掃描 QR Code -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- PeerJS CDN 用於免設定 P2P 即時傳輸連線 -->
+    <script src="https://unpkg.com/peerjs@1.6.0/dist/peerjs.min.js"></script>
     
     <style>
         body {
@@ -52,7 +54,7 @@
             position: relative;
             z-index: 2;
         }
-        /* 極佳觸控點擊與互動陰影 */
+        /* 互動卡片陰影 */
         .interactive-card {
             box-shadow: 0 4px 20px -2px rgba(148, 163, 184, 0.12), 0 2px 8px -1px rgba(148, 163, 184, 0.08);
         }
@@ -67,19 +69,19 @@
                 <i class="fa-solid fa-cloud-word text-xl animate-pulse"></i>
             </div>
             <div>
-                <h1 class="font-bold text-xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">即時互動文字雲 <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold ml-1">現場同步版</span></h1>
-                <p class="text-xs text-slate-400">Live Synchronized Multi-user Word Cloud Platform</p>
+                <h1 class="font-bold text-xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">即時互動文字雲 <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold ml-1">P2P 現場同步版</span></h1>
+                <p class="text-xs text-slate-400">P2P Synchronized Real-time Multi-user Word Cloud Platform</p>
             </div>
         </div>
         
         <!-- 狀態指示徽章 -->
         <div class="flex items-center gap-4">
-            <div id="status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-sm font-medium border border-emerald-100">
+            <div id="status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 text-slate-500 text-sm font-medium border border-slate-100">
                 <span class="relative flex h-2 w-2">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
                 </span>
-                <span id="status-text">雲端同步中</span>
+                <span id="status-text">連線模組啟動中...</span>
             </div>
         </div>
     </header>
@@ -87,7 +89,7 @@
     <!-- 1. 公眾展示控制端介面 (Host Mode View) -->
     <main id="host-layout" class="hidden flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <!-- 左側：主辦人控制與參與 QR Code 面板 -->
+        <!-- 左側：控制與現場 QR Code 面板 -->
         <section class="lg:col-span-5 flex flex-col gap-6">
             
             <!-- 題目與狀態設定 -->
@@ -113,13 +115,16 @@
                 
                 <!-- 二維碼渲染位置 -->
                 <div class="p-3 bg-white border border-slate-100 rounded-2xl shadow-inner mb-4 transition-all hover:scale-105 duration-300">
-                    <div id="qrcode" class="w-[180px] h-[180px] flex items-center justify-center"></div>
+                    <div id="qrcode" class="w-[180px] h-[180px] flex items-center justify-center text-slate-400 text-xs">
+                        <i class="fa-solid fa-spinner animate-spin text-3xl mb-1 block"></i>
+                        等待產生二維碼...
+                    </div>
                 </div>
 
                 <!-- 分享網址複製列 -->
                 <div class="w-full flex items-center gap-1 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                     <input type="text" id="share-link-input" readonly 
-                           class="bg-transparent text-xs text-slate-500 outline-none px-2 flex-1 truncate">
+                           class="bg-transparent text-xs text-slate-500 outline-none px-2 flex-1 truncate" value="計算網址中...">
                     <button id="copy-link-btn" class="bg-white hover:bg-indigo-50 border border-slate-200 text-indigo-600 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition active:scale-95">
                         <i class="fa-regular fa-copy"></i> 複製連結
                     </button>
@@ -130,10 +135,10 @@
             <div class="bg-white p-5 rounded-2xl interactive-card border border-slate-100 flex-1 flex flex-col min-h-[250px]">
                 <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
                     <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
-                        <i class="fa-solid fa-list-ol text-amber-500"></i> 雲端即時詞彙頻率
+                        <i class="fa-solid fa-list-ol text-amber-500"></i> 即時詞彙與權重
                     </h3>
                     <button id="clear-all-btn" class="text-xs text-rose-500 hover:text-rose-700 font-medium transition flex items-center gap-1">
-                        <i class="fa-regular fa-trash-can"></i> 清空所有提交
+                        <i class="fa-regular fa-trash-can"></i> 清空所有資料
                     </button>
                 </div>
 
@@ -141,14 +146,14 @@
                 <div class="flex-1 overflow-y-auto max-h-[220px] pr-1 space-y-2" id="words-list-container">
                     <div class="text-center py-8 text-slate-400 text-xs">
                         <i class="fa-solid fa-hourglass-start text-2xl mb-2 block animate-pulse"></i>
-                        等待第一筆雲端資料輸入...
+                        等待觀眾掃碼輸入第一個詞彙...
                     </div>
                 </div>
 
                 <!-- 測試用按鈕列 -->
                 <div class="mt-4 pt-3 border-t border-slate-100 flex justify-between gap-2">
                     <button id="load-sample-btn" class="text-xs text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 font-medium transition flex-1">
-                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> 載入測試範例數據
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> 載入測試範例
                     </button>
                     <button id="load-fireshow-btn" class="text-xs text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-medium transition flex-1">
                         <i class="fa-solid fa-fire mr-1"></i> 載入火舞社範例
@@ -160,16 +165,16 @@
         <!-- 右側：大螢幕文字雲展示主體 -->
         <section class="lg:col-span-7 flex flex-col gap-6">
             
-            <!-- 大螢幕顯著題目展示 -->
+            <!-- 大螢幕題目展示 -->
             <div class="bg-white px-6 py-4 rounded-2xl interactive-card border border-slate-100 flex items-center gap-3">
                 <span class="px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg text-xs font-bold tracking-wider shadow-sm animate-pulse">LIVE TOPIC</span>
                 <h2 id="live-topic-title" class="font-bold text-lg text-slate-800 truncate">載入中...</h2>
             </div>
 
-            <!-- 文字雲大畫布容器 -->
+            <!-- 文字雲畫布容器 -->
             <div class="bg-white p-4 rounded-2xl interactive-card border border-slate-100 flex-1 flex flex-col relative">
                 
-                <!-- 大螢幕選單設定列 (風格調色盤、隨機編排) -->
+                <!-- 選單設定列 (視覺風格、隨機編排) -->
                 <div class="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-semibold text-slate-400">視覺風格：</span>
@@ -177,7 +182,6 @@
                             <button data-theme="modern" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-600 font-medium transition border border-indigo-400">莫蘭迪</button>
                             <button data-theme="sunset" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-500 font-medium transition border border-transparent">日落橙</button>
                             <button data-theme="forest" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-500 font-medium transition border border-transparent">森林綠</button>
-                            <button data-theme="neon" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-500 font-medium transition border border-transparent">霓虹黑</button>
                             <button data-theme="fireshow" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-500 font-medium transition border border-transparent flex items-center gap-1">火舞社 🔥</button>
                         </div>
                     </div>
@@ -194,7 +198,7 @@
                             <i class="fa-solid fa-cloud text-2xl"></i>
                         </div>
                         <h3 class="font-bold text-slate-700 mb-1">等待生成文字雲</h3>
-                        <p class="text-xs text-slate-400 max-w-xs">目前雲端尚無資料，請讓觀眾掃描左側二維碼送出詞彙！</p>
+                        <p class="text-xs text-slate-400 max-w-xs">目前尚未有資料，請讓觀眾掃描左側二維碼送出詞彙！</p>
                     </div>
 
                     <!-- 專屬火花上升粒子背景 -->
@@ -203,7 +207,7 @@
                     <canvas id="cloud-canvas" class="w-full h-full transition-all duration-300"></canvas>
                 </div>
 
-                <!-- 主控制功能：完成與下載 -->
+                <!-- 下方功能列：完成與下載 -->
                 <div class="mt-4 flex gap-3">
                     <button id="lock-btn" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-md">
                         <i class="fa-solid fa-lock-open"></i> 鎖定收集 (觀眾將無法再提交)
@@ -219,22 +223,21 @@
     <!-- 2. 手機端輸入介面 (Participant View - `?view=input`) -->
     <main id="user-layout" class="hidden flex-1 max-w-md w-full mx-auto p-4 md:p-6 flex flex-col justify-center gap-6">
         
-        <!-- 手機端頂部提示 -->
         <div id="user-card-container" class="bg-white p-6 rounded-3xl shadow-xl border border-slate-100 flex flex-col gap-6 transition-all duration-500 relative overflow-hidden">
             
-            <!-- 上升火花粒子畫布(當主辦人更換為火舞社風格時，手機端會一起燃燒粒子背景！) -->
+            <!-- 上升火花粒子畫布(火舞社風格時同步啟動) -->
             <canvas id="user-particle-canvas" class="absolute inset-0 w-full h-full pointer-events-none opacity-40 z-0"></canvas>
             
             <div class="z-10 flex flex-col gap-4">
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm" id="user-status-badge">
-                        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        即時連線中
+                        <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        連線大螢幕中...
                     </span>
                     <i class="fa-solid fa-fire-flame-curved text-amber-500 text-lg animate-bounce hidden" id="user-fire-icon"></i>
                 </div>
 
-                <!-- 即時動態同步題目 -->
+                <!-- 即時同步題目 -->
                 <div class="border-b border-slate-100 pb-3">
                     <p class="text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">互動討論主題</p>
                     <h2 id="user-topic" class="text-xl font-bold text-slate-800 leading-snug">載入大螢幕主題中...</h2>
@@ -256,7 +259,7 @@
                 </div>
             </div>
 
-            <!-- 鎖定覆蓋面板（當主辦人關閉收集時顯示） -->
+            <!-- 鎖定覆蓋面板（主辦人關閉收集時顯示） -->
             <div id="user-lock-overlay" class="absolute inset-0 bg-slate-900/40 backdrop-blur-md hidden flex-col items-center justify-center text-center p-6 z-20 transition-all duration-300">
                 <div class="bg-white p-6 rounded-2xl shadow-2xl max-w-xs border border-slate-100 flex flex-col items-center">
                     <div class="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center text-2xl mb-4 animate-bounce">
@@ -284,43 +287,29 @@
         
         <!-- 手機端小腳註 -->
         <p class="text-center text-slate-400 text-xs mt-2">
-            互動文字雲系統 • 即時高效率雲端連線
+            互動文字雲系統 • P2P 高速低延遲連線
         </p>
     </main>
 
-    <!-- 精美 Toast 通知組件 -->
+    <!-- Toast 通知組件 -->
     <div id="toast-message" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-50 transition-all duration-300">
         <span id="toast-icon"></span>
         <span id="toast-text" class="text-sm font-medium">提示訊息</span>
     </div>
 
-    <!-- Firebase JS SDK & 系統整合核心 -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- 全域變數定義 ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'wordcloud-shared';
-        const defaultFirebaseConfig = {
-            apiKey: "",
-            authDomain: "mock-project.firebaseapp.com",
-            projectId: "mock-project",
-            storageBucket: "mock-project.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "1:123456789:web:abcdef"
-        };
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
-
-        let db, auth;
-        let isFirebaseActive = false;
-
-        // --- 核心應用狀態 ---
+    <!-- P2P 系統核心整合程式碼 -->
+    <script>
+        // --- 全域變數與系統狀態 ---
         let viewRole = 'host'; // 'host' 或 'input'
         let currentTheme = 'modern';
         let topic = '今天的心情如何？用三個詞形容！';
         let isLocked = false;
-        let wordsMap = {}; // 用於統計單字權重
+        let wordsMap = {}; // 字詞與權重對應表
+
+        // --- P2P 連線變數 ---
+        let peerInstance = null;
+        let p2pConnections = []; // 主辦端存儲所有連進來的手機端 connection
+        let clientConn = null;   // 手機端用來儲存與主辦端的單一 connection
 
         // --- 粒子特效變數 ---
         let hostParticleId = null;
@@ -331,154 +320,230 @@
         // --- 美學主題調色盤 ---
         const palettes = {
             modern: {
-                bg: '#f8fafc', // slate-50
+                bg: '#f8fafc',
                 colors: ['#6366f1', '#4f46e5', '#8b5cf6', '#d946ef', '#ec4899', '#06b6d4', '#14b8a6'],
                 bodyBg: '#f8fafc'
             },
             sunset: {
-                bg: '#fffbeb', // amber-50
+                bg: '#fffbeb',
                 colors: ['#f97316', '#ea580c', '#dd6b20', '#e11d48', '#be123c', '#ca8a04', '#b45309'],
                 bodyBg: '#fffbeb'
             },
             forest: {
-                bg: '#f0fdf4', // green-50
+                bg: '#f0fdf4',
                 colors: ['#16a34a', '#15803d', '#14532d', '#0d9488', '#0f766e', '#0369a1', '#65a30d'],
                 bodyBg: '#f0fdf4'
             },
-            neon: {
-                bg: '#0f172a', // 暗黑霓虹
-                colors: ['#38bdf8', '#818cf8', '#f472b6', '#34d399', '#a78bfa', '#fbbf24', '#2dd4bf'],
-                bodyBg: '#0f172a'
-            },
             fireshow: {
-                bg: '#140502', // 火舞黑背景
+                bg: '#140502', // 夜幕暗夜火舞紅
                 colors: ['#ff4500', '#ff8c00', '#ff3333', '#ffd700', '#ff6347', '#ff1493', '#ffa500'],
                 bodyBg: '#140502'
             }
         };
 
-        // --- STREAMING_CHUNK:Firebase Initialization and Auth... -->
-        // --- 初始化 Firebase 及安全認證 ---
-        async function initFirebase() {
-            try {
-                // 如果是預設無效設定，直接切換到本機 LocalStorage 模擬模式
-                if (!firebaseConfig.apiKey && firebaseConfig.projectId === "mock-project") {
-                    console.log("偵測到處於本地/沙盒預設環境，切換至本機模擬同步模式！");
-                    isFirebaseActive = false;
-                    initMockStorage();
-                    return;
-                }
-
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-
-                // RULE 3: 先執行匿名登入，後續才進行 Firestore 任何讀寫
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                isFirebaseActive = true;
-                console.log("Firebase 雲端模組即時連線成功！");
-            } catch (err) {
-                console.warn("Firebase 載入失敗，已自動降級至單機本機模擬模式：", err);
-                isFirebaseActive = false;
-                initMockStorage();
-            }
-        }
-
-        // --- 模擬本地儲存體模式 (當沙盒無雲端連線時防止頁面空白) ---
-        function initMockStorage() {
-            // 本機模擬資料初始化
-            if (!localStorage.getItem('wordcloud_config')) {
-                const initConfig = { topic: "今天的心情如何？用三個詞形容！", isLocked: false, theme: "modern" };
-                localStorage.setItem('wordcloud_config', JSON.stringify(initConfig));
-            }
-            if (!localStorage.getItem('wordcloud_submissions')) {
-                localStorage.setItem('wordcloud_submissions', JSON.stringify([]));
-            }
-        }
-
-        // --- STREAMING_CHUNK:Routing and UI preparation... -->
-        // --- 路由分配與 UI 渲染初始化 ---
-        window.onload = async function() {
-            await initFirebase();
-
-            // 判斷當前角色是主辦人(Host)還是填寫端(User)
+        // --- 初始化入口 ---
+        window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('view') === 'input') {
+            const roomId = urlParams.get('room');
+
+            if (urlParams.get('view') === 'input' && roomId) {
+                // 1. 手機輸入端
                 viewRole = 'input';
                 document.getElementById('user-layout').classList.remove('hidden');
-                document.getElementById('host-header').classList.add('hidden'); // 手機端不需 header
-                setupUserView();
+                document.getElementById('host-header').classList.add('hidden');
+                initClientPeer(roomId);
             } else {
+                // 2. 主辦大螢幕端
                 viewRole = 'host';
                 document.getElementById('host-layout').classList.remove('hidden');
-                setupHostView();
+                initHostPeer();
             }
         };
 
-        // --- STREAMING_CHUNK:Setting up Host panel controls... -->
-        // --- [主辦人端] 核心邏輯設定 ---
-        function setupHostView() {
-            // 1. 動態取得當前網址並渲染現場 QR Code
-            const currentUrl = window.location.href.split('?')[0];
-            const inviteUrl = `${currentUrl}?view=input`;
-            
-            document.getElementById('share-link-input').value = inviteUrl;
-            
-            const qrcodeContainer = document.getElementById('qrcode');
-            qrcodeContainer.innerHTML = '';
-            new QRCode(qrcodeContainer, {
-                text: inviteUrl,
-                width: 180,
-                height: 180,
-                colorDark : "#0f172a",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.M
+        // ==========================================
+        // 📡 P2P 核心邏輯 - 主辦端 (Host)
+        // ==========================================
+        function initHostPeer() {
+            // 初始化 Peer 實例（使用 PeerJS 免費公用 Signaling 伺服器）
+            peerInstance = new Peer();
+
+            peerInstance.on('open', (id) => {
+                const currentUrl = window.location.href.split('?')[0];
+                const inviteUrl = `${currentUrl}?view=input&room=${id}`;
+                
+                document.getElementById('share-link-input').value = inviteUrl;
+                
+                // 渲染現場專屬 P2P 連線 QR Code
+                const qrcodeContainer = document.getElementById('qrcode');
+                qrcodeContainer.innerHTML = '';
+                new QRCode(qrcodeContainer, {
+                    text: inviteUrl,
+                    width: 180,
+                    height: 180,
+                    colorDark : "#0f172a",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M
+                });
+
+                document.getElementById('status-text').innerText = `同步頻道已就緒 (頻道ID: ${id.substring(0, 6).toUpperCase()})`;
+                document.getElementById('status-badge').className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-sm font-medium border border-emerald-100";
+                
+                setupHostView();
             });
 
-            // 2. 複製連結按鈕監聽
+            // 監聽手機端的連入事件
+            peerInstance.on('connection', (conn) => {
+                p2pConnections.push(conn);
+
+                conn.on('open', () => {
+                    // 觀眾連進來時，主辦端立刻把當前配置（題目、風格、鎖定狀態）推播給這部手機
+                    conn.send({
+                        type: 'sync',
+                        topic: topic,
+                        theme: currentTheme,
+                        isLocked: isLocked
+                    });
+                });
+
+                // 接收手機端傳來的資料
+                conn.on('data', (data) => {
+                    if (data.type === 'submit' && !isLocked) {
+                        if (data.words && Array.isArray(data.words)) {
+                            data.words.forEach(word => {
+                                wordsMap[word] = (wordsMap[word] || 0) + 1;
+                            });
+                            renderWordsList();
+                            renderWordCloud();
+                            showToast("大螢幕已即時飛入觀眾的新想法！", "success");
+                        }
+                    }
+                });
+
+                conn.on('close', () => {
+                    p2pConnections = p2pConnections.filter(c => c !== conn);
+                });
+            });
+
+            peerInstance.on('error', (err) => {
+                console.error("主辦端連線錯誤：", err);
+                showToast("信號伺服器連線異常，請重整大螢幕再試！", "error");
+            });
+        }
+
+        // 當主辦端的題目、視覺風格或鎖定狀態改變時，推播給所有在場連線的手機
+        function broadcastConfig() {
+            const configPayload = {
+                type: 'sync',
+                topic: topic,
+                theme: currentTheme,
+                isLocked: isLocked
+            };
+            p2pConnections.forEach(conn => {
+                if (conn.open) {
+                    conn.send(configPayload);
+                }
+            });
+        }
+
+        // ==========================================
+        // 📡 P2P 核心邏輯 - 手機觀眾端 (Client)
+        // ==========================================
+        function initClientPeer(roomId) {
+            peerInstance = new Peer();
+
+            peerInstance.on('open', () => {
+                // 主動連接主辦端的大螢幕房間 ID
+                clientConn = peerInstance.connect(roomId);
+
+                clientConn.on('open', () => {
+                    const badge = document.getElementById('user-status-badge');
+                    badge.className = "text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm";
+                    badge.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>已成功連線大螢幕`;
+                    showToast("已成功連線至展示大螢幕，快寫下你的回答吧！", "success");
+                    setupUserView();
+                });
+
+                // 接收主辦端廣播過來的同步訊號
+                clientConn.on('data', (data) => {
+                    if (data.type === 'sync') {
+                        handleConfigUpdate(data);
+                    }
+                });
+
+                clientConn.on('close', () => {
+                    const badge = document.getElementById('user-status-badge');
+                    badge.className = "text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm";
+                    badge.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>連線中斷`;
+                    showToast("與大螢幕斷開連線，請重新掃碼加入！", "error");
+                });
+            });
+
+            peerInstance.on('error', (err) => {
+                console.error("手機端連線錯誤：", err);
+                showToast("連線主螢幕失敗，請確認掃描的條碼是否正確！", "error");
+            });
+        }
+
+        // 手機端送出字彙
+        function sendAnswerToHost(processedWords) {
+            if (clientConn && clientConn.open) {
+                clientConn.send({
+                    type: 'submit',
+                    words: processedWords
+                });
+                return true;
+            }
+            return false;
+        }
+
+
+        // ==========================================
+        // 🎨 網頁 UI 事件與渲染設定 (主辦端)
+        // ==========================================
+        function setupHostView() {
+            // 複製大螢幕網址連結
             document.getElementById('copy-link-btn').addEventListener('click', () => {
                 const input = document.getElementById('share-link-input');
                 input.select();
                 document.execCommand('copy');
-                showToast("連結已複製到剪貼簿，可直接傳送給他人！", "success");
+                showToast("連結已複製，可直接傳送給他人！", "success");
             });
 
-            // 3. 風格主題點擊切換
+            // 點擊主題風格變更
             document.querySelectorAll('.theme-badge').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    const selectedTheme = e.currentTarget.getAttribute('data-theme');
-                    updateConfigOnCloud({ theme: selectedTheme });
+                    currentTheme = e.currentTarget.getAttribute('data-theme');
+                    broadcastConfig(); // 同步給所有手機端
+                    handleConfigUpdate({ topic, theme: currentTheme, isLocked });
                 });
             });
 
-            // 4. 修改討論題目即時監聽
+            // 編輯討論題目監聽
             document.getElementById('topic-input').addEventListener('input', (e) => {
-                const val = e.target.value.trim();
-                updateConfigOnCloud({ topic: val || "未命名討論題目" });
+                topic = e.target.value.trim() || "未命名討論題目";
+                broadcastConfig(); // 即時同步給現場觀眾手機
+                document.getElementById('live-topic-title').innerText = topic;
             });
 
-            // 5. 鎖定按鈕監聽
+            // 鎖定收集按鈕
             document.getElementById('lock-btn').addEventListener('click', () => {
-                updateConfigOnCloud({ isLocked: !isLocked });
+                isLocked = !isLocked;
+                broadcastConfig(); // 同步鎖定訊息
+                handleConfigUpdate({ topic, theme: currentTheme, isLocked });
             });
 
-            // 6. 下載按鈕監聽
+            // 下載 PNG 按鈕
             document.getElementById('download-btn').addEventListener('click', () => {
                 downloadCloudPNG();
             });
 
-            // 7. 隨機排版按鈕監聽
+            // 隨機排版按鈕
             document.getElementById('redraw-btn').addEventListener('click', () => {
                 renderWordCloud();
                 showToast("大螢幕版面已重新隨機排列！", "success");
             });
 
-            // 8. 樣品測試數據按鈕監聽
+            // 範例資料按鈕
             document.getElementById('load-sample-btn').addEventListener('click', () => {
                 loadBulkSampleData('normal');
             });
@@ -486,150 +551,94 @@
                 loadBulkSampleData('fireshow');
             });
 
-            // 9. 清空資料庫按鈕監聽
+            // 清空所有資料
             document.getElementById('clear-all-btn').addEventListener('click', () => {
-                clearCloudSubmissions();
+                wordsMap = {};
+                renderWordsList();
+                renderWordCloud();
+                showToast("已清空大螢幕所有詞彙！", "info");
             });
 
-            // 10. 大螢幕尺寸變更自適應監聽
+            // RWD 視窗大小自適應
             const resizeObserver = new ResizeObserver(() => {
                 renderWordCloud();
             });
             resizeObserver.observe(document.getElementById('canvas-container'));
 
-            // 11. 開始訂閱雲端資料
-            startCloudListeners();
+            // 渲染預置空狀態
+            document.getElementById('live-topic-title').innerText = topic;
         }
 
-        // --- STREAMING_CHUNK:Setting up Participant view elements... -->
-        // --- [填寫手機端] 核心邏輯設定 ---
+        // ==========================================
+        // 📱 手機端作答 UI 設定
+        // ==========================================
         function setupUserView() {
-            // 提交按鈕監聽
+            // 手機提交按鈕
             document.getElementById('user-submit-btn').addEventListener('click', () => {
                 submitUserAnswer();
             });
 
-            // 再填一個按鈕監聽
+            // 再寫一個按鈕
             document.getElementById('user-go-again-btn').addEventListener('click', () => {
                 document.getElementById('user-success-overlay').classList.add('hidden');
                 document.getElementById('user-success-overlay').classList.remove('flex');
                 document.getElementById('user-answer-input').value = '';
                 document.getElementById('user-answer-input').focus();
             });
-
-            // 開始訂閱雲端資料（手機端也需要同步最新的題目、主題配色及鎖定狀態）
-            startCloudListeners();
         }
 
-        // --- STREAMING_CHUNK:Updating config to cloud... -->
-        // --- 更新設定至雲端 (即時推播給所有人) ---
-        async function updateConfigOnCloud(newData) {
-            if (isFirebaseActive) {
-                // RULE 1: 使用標準路徑：/artifacts/{appId}/public/data/config
-                const configDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'main');
-                try {
-                    await setDoc(configDocRef, newData, { merge: true });
-                } catch (e) {
-                    console.error("更新雲端設定失敗：", e);
-                }
+        // 提交手機回答至大螢幕
+        function submitUserAnswer() {
+            if (isLocked) {
+                showToast("收集已關閉，無法提交答案喔！", "warning");
+                return;
+            }
+
+            const inputEl = document.getElementById('user-answer-input');
+            const text = inputEl.value.trim();
+
+            if (!text) {
+                showToast("請寫點答案再送出喔！", "warning");
+                return;
+            }
+
+            // 分割符
+            const regex = /[\s,，、\n\r\t]+/;
+            const newWords = text.split(regex).map(w => w.trim()).filter(w => w.length > 0);
+
+            if (newWords.length === 0) {
+                showToast("沒有解析到有效的詞彙，請換個詞試試！", "warning");
+                return;
+            }
+
+            // 限制詞彙長度
+            const processedWords = newWords.map(w => w.substring(0, 15));
+
+            // 送出 P2P 傳輸
+            const success = sendAnswerToHost(processedWords);
+            if (success) {
+                document.getElementById('user-success-overlay').classList.remove('hidden');
+                document.getElementById('user-success-overlay').classList.add('flex');
             } else {
-                // 模擬模式
-                const localConfig = JSON.parse(localStorage.getItem('wordcloud_config'));
-                const merged = { ...localConfig, ...newData };
-                localStorage.setItem('wordcloud_config', JSON.stringify(merged));
-                // 觸發本地更新事件
-                triggerLocalUpdate();
+                showToast("與大螢幕連線異常，送出失敗！", "error");
             }
         }
 
-        // --- STREAMING_CHUNK:Starting live database listeners... -->
-        // --- [關鍵] 訂閱雲端即時串流事件 (Firestore onSnapshot) ---
-        function startCloudListeners() {
-            if (isFirebaseActive) {
-                // RULE 1 & RULE 2: 單純查詢 config 狀態
-                const configDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'main');
-                onSnapshot(configDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        handleConfigUpdate(data);
-                    } else {
-                        // 初始化雲端預設設定
-                        updateConfigOnCloud({
-                            topic: "今天的心情如何？用三個詞形容！",
-                            isLocked: false,
-                            theme: "modern"
-                        });
-                    }
-                }, (err) => {
-                    console.error("訂閱主題失敗: ", err);
-                });
-
-                // RULE 1 & RULE 2: 單純無條件查詢所有使用者提交的 submissions (內存做權重加總)
-                const submissionsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
-                onSnapshot(submissionsColRef, (querySnap) => {
-                    const aggregatedMap = {};
-                    querySnap.forEach((doc) => {
-                        const data = doc.data();
-                        if (data.words && Array.isArray(data.words)) {
-                            data.words.forEach(word => {
-                                aggregatedMap[word] = (aggregatedMap[word] || 0) + 1;
-                            });
-                        }
-                    });
-                    handleSubmissionsUpdate(aggregatedMap);
-                }, (err) => {
-                    console.error("訂閱詞彙失敗: ", err);
-                });
-
-            } else {
-                // 模擬模式：利用定時偵測或手動更新
-                window.addEventListener('storage_updated', () => {
-                    const data = JSON.parse(localStorage.getItem('wordcloud_config'));
-                    handleConfigUpdate(data);
-
-                    const submissions = JSON.parse(localStorage.getItem('wordcloud_submissions'));
-                    const aggregatedMap = {};
-                    submissions.forEach(sub => {
-                        sub.words.forEach(word => {
-                            aggregatedMap[word] = (aggregatedMap[word] || 0) + 1;
-                        });
-                    });
-                    handleSubmissionsUpdate(aggregatedMap);
-                });
-                // 主動模擬一次觸發
-                triggerLocalUpdate();
-            }
-        }
-
-        // 當接收到本地模擬變更
-        function triggerLocalUpdate() {
-            const event = new Event('storage_updated');
-            window.dispatchEvent(event);
-        }
-
-        // --- STREAMING_CHUNK:Handling real-time state changes... -->
-        // --- 狀態分發：處理最新設定狀態（雙端同步） ---
+        // ==========================================
+        // 🔄 雙端同步邏輯分發
+        // ==========================================
         function handleConfigUpdate(config) {
-            topic = config.topic || "今天的心情如何？用三個詞形容！";
-            isLocked = config.isLocked || false;
-            currentTheme = config.theme || "modern";
+            topic = config.topic;
+            currentTheme = config.theme;
+            isLocked = config.isLocked;
 
-            // 全域網頁背景自適應
             const palette = palettes[currentTheme];
             document.body.style.backgroundColor = palette.bodyBg;
 
-            // 雙端不同的介面渲染處理
             if (viewRole === 'host') {
-                // 1. 同步大螢幕題目
+                // 大螢幕端配置更新
                 document.getElementById('live-topic-title').innerText = topic;
                 
-                // 2. 同步控制輸入框（若非目前焦點）
-                const topicInput = document.getElementById('topic-input');
-                if (document.activeElement !== topicInput) {
-                    topicInput.value = topic;
-                }
-
-                // 3. 變更鎖定按鈕狀態
                 const lockBtn = document.getElementById('lock-btn');
                 const downloadBtn = document.getElementById('download-btn');
                 const statusBadge = document.getElementById('status-badge');
@@ -638,24 +647,22 @@
                 if (isLocked) {
                     lockBtn.innerHTML = `<i class="fa-solid fa-lock"></i> 開啟收集 (解鎖)`;
                     lockBtn.className = "flex-1 bg-rose-600 hover:bg-rose-700 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-md";
-                    
                     downloadBtn.removeAttribute('disabled');
                     downloadBtn.className = "flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 active:scale-95";
                     
                     statusBadge.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 text-rose-600 text-sm font-medium border border-rose-100";
-                    statusText.innerText = "收集已鎖定";
+                    statusText.innerText = `收集已鎖定 (頻道ID: ${peerInstance.id.substring(0,6).toUpperCase()})`;
                 } else {
                     lockBtn.innerHTML = `<i class="fa-solid fa-lock-open"></i> 鎖定收集 (觀眾將無法再提交)`;
                     lockBtn.className = "flex-1 bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-md";
-                    
                     downloadBtn.setAttribute('disabled', 'true');
                     downloadBtn.className = "flex-1 bg-slate-200 text-slate-400 font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 cursor-not-allowed";
                     
                     statusBadge.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-sm font-medium border border-emerald-100";
-                    statusText.innerText = "雲端同步中";
+                    statusText.innerText = `即時連線中 (頻道ID: ${peerInstance.id.substring(0,6).toUpperCase()})`;
                 }
 
-                // 4. 更換大螢幕主題風格按鈕反饋
+                // 更新主題風格高亮
                 document.querySelectorAll('.theme-badge').forEach(btn => {
                     btn.classList.remove('border-indigo-400', 'text-indigo-600', 'border-amber-500', 'text-amber-500', 'bg-indigo-50', 'bg-amber-50/10');
                     btn.classList.add('border-transparent', 'text-slate-500', 'bg-slate-100');
@@ -670,13 +677,12 @@
                     }
                 }
 
-                // 重繪大螢幕文字雲
                 renderWordCloud();
             } else {
-                // 手機端邏輯處理
+                // 手機端同步配置更新
                 document.getElementById('user-topic').innerText = topic;
 
-                // 即時動態同步鎖定
+                // 手機端鎖定遮罩
                 const lockOverlay = document.getElementById('user-lock-overlay');
                 if (isLocked) {
                     lockOverlay.classList.remove('hidden');
@@ -686,7 +692,7 @@
                     lockOverlay.classList.remove('flex');
                 }
 
-                // 隨時更換手機卡片主題風格樣式！
+                // 火舞風格時同步更改手機主題與動態粒子
                 const userCard = document.getElementById('user-card-container');
                 const userStatusBadge = document.getElementById('user-status-badge');
                 const userSubmitBtn = document.getElementById('user-submit-btn');
@@ -699,7 +705,6 @@
                     userFireIcon.classList.remove('hidden');
                     initUserFireshowParticles();
                 } else {
-                    // 一般質感亮色主題
                     userCard.className = "bg-white p-6 rounded-3xl shadow-xl border border-slate-100 flex flex-col gap-6 transition-all duration-500 relative overflow-hidden text-slate-800";
                     userStatusBadge.className = "text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm";
                     userSubmitBtn.className = "w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-indigo-100 transition duration-150 flex items-center justify-center gap-2 active:scale-95";
@@ -709,19 +714,9 @@
             }
         }
 
-        // --- STREAMING_CHUNK:Handling incoming cloud data submissions... -->
-        // --- 狀態分發：處理最新收集到的詞彙庫 ---
-        function handleSubmissionsUpdate(aggregatedMap) {
-            wordsMap = aggregatedMap;
-            
-            if (viewRole === 'host') {
-                renderWordsList();
-                renderWordCloud();
-            }
-        }
-
-        // --- STREAMING_CHUNK:Displaying words list on admin side... -->
-        // --- [主辦人端] 渲染左下角詞彙分析清單 ---
+        // ==========================================
+        // 📊 詞彙清單管理與微調
+        // ==========================================
         function renderWordsList() {
             const container = document.getElementById('words-list-container');
             const sortedWords = Object.entries(wordsMap).sort((a, b) => b[1] - a[1]);
@@ -730,7 +725,7 @@
                 container.innerHTML = `
                     <div class="text-center py-8 text-slate-400 text-xs">
                         <i class="fa-solid fa-hourglass-start text-2xl mb-2 block animate-pulse"></i>
-                        等待第一筆雲端資料輸入...
+                        等待觀眾掃碼輸入第一個詞彙...
                     </div>
                 `;
                 return;
@@ -758,211 +753,60 @@
             container.innerHTML = html;
         }
 
-        // --- STREAMING_CHUNK:Manual adjustments for submitted weights... -->
-        // 將修改函數綁至全域，方便內嵌在 HTML onclick
-        window.modifyWeightDirectly = async function(word, offset) {
+        // 主辦端手動微調權重
+        window.modifyWeightDirectly = function(word, offset) {
             if (isLocked) return;
-            // 雲端模式下透過發送一個覆寫或直接微調
-            if (isFirebaseActive) {
-                // 因為我們是用獨立 submissions 文件來做內存彙總，
-                // 主辦人直接在管理台增減，可以寫一個特殊補償 doc 來校正權重！
-                try {
-                    const submissionsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
-                    if (offset > 0) {
-                        await addDoc(submissionsColRef, { words: [word], timestamp: Date.now() });
-                    } else {
-                        // 扣除則隨機刪除一個包含該字詞的 submissions 紀錄
-                        const querySnap = await getDocs(submissionsColRef);
-                        let targetDocId = null;
-                        for (let docSnap of querySnap.docs) {
-                            const data = docSnap.data();
-                            if (data.words && data.words.includes(word)) {
-                                targetDocId = docSnap.id;
-                                break;
-                            }
-                        }
-                        if (targetDocId) {
-                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', targetDocId));
-                        }
-                    }
-                } catch (e) {
-                    console.error(e);
-                }
+            const newCount = (wordsMap[word] || 0) + offset;
+            if (newCount <= 0) {
+                delete wordsMap[word];
             } else {
-                const submissions = JSON.parse(localStorage.getItem('wordcloud_submissions'));
-                if (offset > 0) {
-                    submissions.push({ words: [word], timestamp: Date.now() });
-                } else {
-                    const index = submissions.findIndex(sub => sub.words.includes(word));
-                    if (index > -1) submissions.splice(index, 1);
-                }
-                localStorage.setItem('wordcloud_submissions', JSON.stringify(submissions));
-                triggerLocalUpdate();
+                wordsMap[word] = newCount;
             }
+            renderWordsList();
+            renderWordCloud();
         };
 
-        window.deleteWordDirectly = async function(word) {
+        // 主辦端刪除單字
+        window.deleteWordDirectly = function(word) {
             if (isLocked) return;
-            if (isFirebaseActive) {
-                try {
-                    const submissionsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
-                    const querySnap = await getDocs(submissionsColRef);
-                    // 批次刪除該單字的所有提交
-                    const deletePromises = [];
-                    querySnap.forEach((docSnap) => {
-                        const data = docSnap.data();
-                        if (data.words && data.words.includes(word)) {
-                            deletePromises.push(deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', docSnap.id)));
-                        }
-                    });
-                    await Promise.all(deletePromises);
-                    showToast(`已將「${word}」完全移除`, "info");
-                } catch (e) {
-                    console.error(e);
-                }
-            } else {
-                let submissions = JSON.parse(localStorage.getItem('wordcloud_submissions'));
-                submissions = submissions.filter(sub => !sub.words.includes(word));
-                localStorage.setItem('wordcloud_submissions', JSON.stringify(submissions));
-                triggerLocalUpdate();
-                showToast(`已將「${word}」完全移除`, "info");
-            }
+            delete wordsMap[word];
+            renderWordsList();
+            renderWordCloud();
+            showToast(`已將「${word}」完全移除`, "info");
         };
 
-        // --- STREAMING_CHUNK:Adding sample simulation data... -->
-        // --- 載入預置測試與火舞社大數據 ---
-        async function loadBulkSampleData(type) {
-            let sampleList = [];
+        // ==========================================
+        // 🧪 測試範例載入
+        // ==========================================
+        function loadBulkSampleData(type) {
+            if (isLocked) return;
             if (type === 'fireshow') {
-                sampleList = [
-                    ["火舞", 24], ["烈焰", 19], ["熱血", 16], ["安全第一", 17], ["火繩", 12],
-                    ["火棍", 14], ["火扇", 11], ["璀璨", 15], ["極限", 10], ["狂熱", 13],
-                    ["光影疊加", 9], ["燃燒靈魂", 14], ["夥伴", 11], ["熱情", 12], ["火圈", 8],
-                    ["安全員", 11]
-                ];
-                updateConfigOnCloud({
-                    topic: "談起「火舞社」，你腦中浮現的畫面？",
-                    theme: "fireshow"
-                });
+                wordsMap = {
+                    "火舞": 24, "烈焰": 19, "熱血": 16, "安全第一": 17, "火繩": 12,
+                    "火棍": 14, "火扇": 11, "璀璨": 15, "極限": 10, "狂熱": 13,
+                    "燃燒靈魂": 14, "夥伴": 11, "熱情": 12, "火圈": 8, "安全員": 11
+                };
+                topic = "談起「火舞社」，你腦中浮現的第一印象？";
+                currentTheme = "fireshow";
             } else {
-                sampleList = [
-                    ["開心", 18], ["充滿能量", 14], ["放鬆", 12], ["學習", 15], ["成長", 11],
-                    ["幸福", 9], ["加油", 10], ["元氣滿滿", 13], ["突破", 7], ["正能量", 10]
-                ];
-                updateConfigOnCloud({
-                    topic: "今天的心情如何？用三個詞形容！",
-                    theme: "modern"
-                });
+                wordsMap = {
+                    "開心": 18, "充滿能量": 14, "放鬆": 12, "學習": 15, "成長": 11,
+                    "幸福": 9, "加油": 10, "元氣滿滿": 13, "突破": 7, "正能量": 10
+                };
+                topic = "今天的心情如何？用三個詞形容！";
+                currentTheme = "modern";
             }
-
-            if (isFirebaseActive) {
-                try {
-                    const submissionsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
-                    // 為了避免瞬間寫入量過大造成問題，我們打散送出
-                    const promises = sampleList.map(([word, freq]) => {
-                        return addDoc(submissionsColRef, {
-                            words: Array(freq).fill(word),
-                            timestamp: Date.now()
-                        });
-                    });
-                    await Promise.all(promises);
-                    showToast("已成功同步載入大數據範例！", "success");
-                } catch (e) {
-                    console.error(e);
-                }
-            } else {
-                const submissions = JSON.parse(localStorage.getItem('wordcloud_submissions')) || [];
-                sampleList.forEach(([word, freq]) => {
-                    submissions.push({
-                        words: Array(freq).fill(word),
-                        timestamp: Date.now()
-                    });
-                });
-                localStorage.setItem('wordcloud_submissions', JSON.stringify(submissions));
-                triggerLocalUpdate();
-                showToast("已成功載入本地模擬範例！", "success");
-            }
+            document.getElementById('topic-input').value = topic;
+            broadcastConfig();
+            handleConfigUpdate({ topic, theme: currentTheme, isLocked });
+            renderWordsList();
+            renderWordCloud();
+            showToast("測試資料已載入！並已同步到所有觀眾手機！", "success");
         }
 
-        // --- 清空雲端所有提交紀錄 ---
-        async function clearCloudSubmissions() {
-            if (isFirebaseActive) {
-                try {
-                    const submissionsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
-                    const querySnap = await getDocs(submissionsColRef);
-                    const deletePromises = querySnap.docs.map(d => deleteDoc(d.ref));
-                    await Promise.all(deletePromises);
-                    showToast("已清空雲端所有詞彙紀錄！", "info");
-                } catch (e) {
-                    console.error("清空失敗：", e);
-                }
-            } else {
-                localStorage.setItem('wordcloud_submissions', JSON.stringify([]));
-                triggerLocalUpdate();
-                showToast("已清空本機模擬詞彙！", "info");
-            }
-        }
-
-        // --- STREAMING_CHUNK:Participant submit action... -->
-        // --- [手機端] 送出回答核心邏輯 ---
-        async function submitUserAnswer() {
-            if (isLocked) {
-                showToast("收集已關閉，無法提交答案喔！", "warning");
-                return;
-            }
-
-            const inputEl = document.getElementById('user-answer-input');
-            const text = inputEl.value.trim();
-
-            if (!text) {
-                showToast("請寫點答案再送出喔！", "warning");
-                return;
-            }
-
-            // 使用常見的分隔符切割字詞 (逗號、頓號、空白、換行等)
-            const regex = /[\s,，、\n\r\t]+/;
-            const newWords = text.split(regex).map(w => w.trim()).filter(w => w.length > 0 && w !== '，' && w !== '。');
-
-            if (newWords.length === 0) {
-                showToast("沒有解析到有效的詞彙，請換個詞試試！", "warning");
-                return;
-            }
-
-            // 將所有詞彙縮減為 15 字元以內
-            const processedWords = newWords.map(w => w.substring(0, 15));
-
-            if (isFirebaseActive) {
-                try {
-                    const submissionsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
-                    await addDoc(submissionsColRef, {
-                        words: processedWords,
-                        timestamp: Date.now()
-                    });
-                    
-                    // 顯示手機送出成功畫面
-                    document.getElementById('user-success-overlay').classList.remove('hidden');
-                    document.getElementById('user-success-overlay').classList.add('flex');
-                } catch (e) {
-                    console.error("送出失敗：", e);
-                    showToast("網路異常，送出失敗！", "error");
-                }
-            } else {
-                // 模擬模式
-                const submissions = JSON.parse(localStorage.getItem('wordcloud_submissions')) || [];
-                submissions.push({
-                    words: processedWords,
-                    timestamp: Date.now()
-                });
-                localStorage.setItem('wordcloud_submissions', JSON.stringify(submissions));
-                triggerLocalUpdate();
-
-                document.getElementById('user-success-overlay').classList.remove('hidden');
-                document.getElementById('user-success-overlay').classList.add('flex');
-            }
-        }
-
-        // --- STREAMING_CHUNK:Host rendering particle backdrop... -->
-        // --- [大螢幕] 火花粒子引擎特效 ---
+        // ==========================================
+        // 🔥 動態火花上升粒子特效 (大螢幕端)
+        // ==========================================
         function initFireshowParticles() {
             const canvas = document.getElementById('particle-canvas');
             if (!canvas) return;
@@ -1029,8 +873,9 @@
             }
         }
 
-        // --- STREAMING_CHUNK:Participant rendering particle backdrop... -->
-        // --- [手機端] 同步上升火花粒子特效 ---
+        // ==========================================
+        // 🔥 手機端同步粒子特效
+        // ==========================================
         function initUserFireshowParticles() {
             const canvas = document.getElementById('user-particle-canvas');
             if (!canvas) return;
@@ -1040,7 +885,7 @@
             canvas.height = rect.height;
 
             userEmbers.length = 0;
-            const numParticles = 15; // 手機端粒子數少一點保持效能
+            const numParticles = 15;
 
             for (let i = 0; i < numParticles; i++) {
                 userEmbers.push({
@@ -1095,8 +940,9 @@
             }
         }
 
-        // --- STREAMING_CHUNK:Drawing word cloud canvas... -->
-        // --- [大螢幕] 執行文字雲 Canvas 主渲染邏輯 ---
+        // ==========================================
+        // ☁️ 繪製文字雲 Canvas 主程序
+        // ==========================================
         function renderWordCloud() {
             const canvas = document.getElementById('cloud-canvas');
             const container = document.getElementById('canvas-container');
@@ -1116,7 +962,6 @@
 
             placeholder.classList.add('opacity-0', 'pointer-events-none');
 
-            // 實體高解析度渲染 (視網膜適配)
             const dpr = window.devicePixelRatio || 1;
             const rect = container.getBoundingClientRect();
             canvas.width = rect.width * dpr;
@@ -1127,7 +972,7 @@
             const activePalette = palettes[currentTheme];
             const themeBg = activePalette.bg;
 
-            // 觸發火舞社背景
+            // 觸發火舞社動態粒子
             if (currentTheme === 'fireshow') {
                 initFireshowParticles();
             } else {
@@ -1160,8 +1005,9 @@
             WordCloud(canvas, options);
         }
 
-        // --- STREAMING_CHUNK:Downloading generated wordcloud PNG... -->
-        // --- [大螢幕] 下載高清 PNG 檔案 ---
+        // ==========================================
+        // 💾 下載高清 PNG 檔案 (主辦端)
+        // ==========================================
         function downloadCloudPNG() {
             if (!isLocked) {
                 showToast("請先點選「鎖定收集」後再下載圖檔！", "warning");
@@ -1196,7 +1042,7 @@
             
             ctx.drawImage(canvas, 0, 0);
             
-            const isDarkBg = (currentTheme === 'fireshow' || currentTheme === 'neon');
+            const isDarkBg = (currentTheme === 'fireshow');
             ctx.fillStyle = isDarkBg ? 'rgba(255, 255, 255, 0.55)' : 'rgba(15, 23, 42, 0.65)';
             ctx.font = `bold ${Math.round(20 * (window.devicePixelRatio || 1))}px "Noto Sans TC", sans-serif`;
             ctx.textAlign = 'center';
@@ -1216,7 +1062,7 @@
             }
         }
 
-        // --- 精美 Toast 提示通知 ---
+        // 精美 Toast 提示通知
         function showToast(message, type = "success") {
             const toast = document.getElementById('toast-message');
             const icon = document.getElementById('toast-icon');
