@@ -378,8 +378,19 @@
         // ==========================================
         function initHostPeer() {
             // 初始化 Peer 實例（使用安全穩定的 PeerJS 預設 Signaling 伺服器）
-            peerInstance = new Peer();
-
+            peerInstance = new Peer({
+                debug: 2,
+                config: {
+                    iceServers: [
+                        {
+                            urls: [
+                                "stun:stun.l.google.com:19302",
+                                "stun:stun1.l.google.com:19302"
+                            ]
+                        }
+                    ]
+                }
+            });
             peerInstance.on('open', (id) => {
                 const currentUrl = window.location.href.split('?')[0];
                 const inviteUrl = `${currentUrl}?view=input&room=${id}`;
@@ -406,9 +417,11 @@
 
             // 監聽手機端的安全 P2P 連入
             peerInstance.on('connection', (conn) => {
+                console.log("Client Connected:", conn.peer);
                 p2pConnections.push(conn);
 
                 conn.on('open', () => {
+                    console.log("Connection Open");
                     // 主辦端向手機推送當前的題目、主題與鎖定設定
                     conn.send({
                         type: 'sync',
@@ -445,6 +458,10 @@
                 console.error("主辦端連線錯誤：", err);
                 showToast("信號連線異常，請重新整理網頁試試！", "error");
             });
+            peerInstance.on("disconnected",()=>{
+                console.log("Host disconnected");
+                peerInstance.reconnect();
+            });
         }
 
         // 發送同步資訊至所有當前 P2P 連線中的手機端
@@ -466,12 +483,32 @@
         // 📡 P2P 核心邏輯 - 手機觀眾端 (Client)
         // ==========================================
         function initClientPeer(roomId) {
-            peerInstance = new Peer();
-
+            peerInstance = new Peer({
+                debug: 2,
+                config: {
+                    iceServers: [
+                        {
+                            urls: [
+                                "stun:stun.l.google.com:19302",
+                                "stun:stun1.l.google.com:19302"
+                            ]
+                        }
+                    ]
+                }
+            });
             peerInstance.on('open', () => {
                 // 連接至大螢幕的專屬 Room ID
-                clientConn = peerInstance.connect(roomId);
-
+                clientConn = peerInstance.connect(roomId,{
+                    reliable:true,
+                    serialization:"json"
+                });
+                setTimeout(()=>{
+                    if(!clientConn.open){
+                        showToast("連線逾時，重新連線...","error");
+                        clientConn.close();
+                        initClientPeer(roomId);
+                    }
+                },8000);
                 clientConn.on('open', () => {
                     const badge = document.getElementById('user-status-badge');
                     badge.className = "text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm";
@@ -486,18 +523,28 @@
                         handleConfigUpdate(data);
                     }
                 });
-
+                clientConn.on("error",(err)=>{
+                
+                    console.error(err);
+                
+                });
                 clientConn.on('close', () => {
                     const badge = document.getElementById('user-status-badge');
                     badge.className = "text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm";
                     badge.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>連線中斷`;
                     showToast("與大螢幕斷開連線，請重新掃碼！", "error");
+                    setTimeout(()=>{
+                        initClientPeer(roomId);
+                    },3000);
                 });
             });
 
             peerInstance.on('error', (err) => {
                 console.error("手機端連線錯誤：", err);
                 showToast("連線大螢幕失敗，請確定 QR Code 網址完整！", "error");
+            });
+            peerInstance.on("disconnected",()=>{
+                peerInstance.reconnect();
             });
         }
 
