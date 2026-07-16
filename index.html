@@ -457,6 +457,8 @@
             peerInstance.on('error', (err) => {
                 console.error("主辦端連線錯誤：", err);
                 showToast("信號連線異常，請重新整理網頁試試！", "error");
+                console.error(err);
+                showToast(err.type || err.message,"error");
             });
             peerInstance.on("disconnected",()=>{
                 console.log("Host disconnected");
@@ -542,6 +544,8 @@
             peerInstance.on('error', (err) => {
                 console.error("手機端連線錯誤：", err);
                 showToast("連線大螢幕失敗，請確定 QR Code 網址完整！", "error");
+                console.error(err);
+                showToast(err.type || err.message,"error");
             });
             peerInstance.on("disconnected",()=>{
                 peerInstance.reconnect();
