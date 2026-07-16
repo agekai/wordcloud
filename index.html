@@ -382,8 +382,11 @@
         // 目前所在 Firebase 房間
         let firebaseRoomRef = null;
         // 房間資料 reference
-
-
+        // ★新增
+        let lastSessionVersion = 0;
+        // ★是否已完成第一次同步
+        let hasInitializedSession = false;
+        
         // --- 粒子特效變數 ---
         let hostParticleId = null;
         let userParticleId = null;
@@ -449,6 +452,7 @@
                     theme: currentTheme,
                     isLocked: false,
                     createdAt: Date.now(),
+                    sessionVersion: Date.now(),
                     words: {}
                 });
             
@@ -580,23 +584,58 @@
         
             // 監聽房間資料變更
             firebaseOnValue(firebaseRoomRef, (snapshot) => {
+            
                 const data = snapshot.val();
-        
-                // 防禦性檢查：若房間不存在
+            
                 if (!data) {
                     showToast("找不到此互動房間，請重新掃描 QR Code！", "error");
                     return;
                 }
-        
+            
+                //=========================
+                // ★偵測是否開始新的一輪
+                //=========================
+
+                if (data.sessionVersion) {
+                
+                    // 第一次進入房間，只記錄版本，不做任何提示
+                    if (!hasInitializedSession) {
+                
+                        lastSessionVersion = data.sessionVersion;
+                        hasInitializedSession = true;
+                
+                    }
+                    // 已經連線後才檢查是否換新的一輪
+                    else if (data.sessionVersion !== lastSessionVersion) {
+                
+                        lastSessionVersion = data.sessionVersion;
+                
+                        // 清空輸入框
+                        document.getElementById("user-answer-input").value = "";
+                
+                        // 關閉成功畫面
+                        document.getElementById("user-success-overlay").classList.add("hidden");
+                        document.getElementById("user-success-overlay").classList.remove("flex");
+                
+                        // 回到輸入框
+                        document.getElementById("user-answer-input").focus();
+                
+                        showToast("主持人已開始新的收集！", "info");
+                    }
+                }
+            
+                //=========================
                 // 同步房間設定
+                //=========================
+            
                 handleConfigUpdate({
                     topic: data.topic,
                     theme: data.theme,
                     isLocked: data.isLocked
                 });
-        
-                // 更新連線狀態 UI
+            
                 updateUserConnectionUI();
+            
             });
         
             // 啟動手機端 UI 互動邏輯
@@ -694,22 +733,39 @@
 
             // 清空所有資料
             document.getElementById('clear-all-btn').addEventListener('click', async () => {
+            
                 // 1. 本地重置
                 wordsMap = {};
                 renderWordsList();
                 renderWordCloud();
             
-                // 2. 遠端同步重置
+                // 2. Firebase 同步
                 if (firebaseRoomId) {
+            
                     try {
-                        const answersRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
+            
+                        // 清除所有答案
+                        const answersRef =
+                            firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
+            
                         await firebaseSet(answersRef, null);
+            
+                        // ★新增：通知所有手機「開始新的一輪」
+                        await firebaseUpdate(firebaseRoomRef, {
+                            sessionVersion: Date.now()
+                        });
+            
                         showToast("已清空所有詞彙！", "info");
+            
                     } catch (error) {
-                        console.error("清空失敗:", error);
+            
+                        console.error(error);
                         showToast("清空失敗，請稍後再試", "error");
+            
                     }
+            
                 }
+            
             });
 
             // 視窗自適應
