@@ -3,149 +3,1243 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>互動即時文字雲 (Firebase 即時同步版)</title>
+    <title>互動即時文字雲 (P2P 安全免設定版)</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- WordCloud2.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
+    <!-- QRCode.js CDN 用於生成現場安全 P2P 掃描二維碼 -->
     <script src="https://cdn.jsdelivr.net/npm/davidshimjs-qrcodejs@0.0.2/qrcode.min.js"></script>
+    <!-- Firebase Realtime Database SDK -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, set, push, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { initializeApp }
+        from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        
+        import {
+            getDatabase,
+            ref,
+            set,
+            push,
+            onValue,
+            update
+        }
+        from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        
+        
+        // ===============================
+        // Firebase 設定
+        // ===============================
         
         const firebaseConfig = {
-            apiKey: "AIzaSyD1rqdwZ0VBMDfMEiP_CBP7VUchOcbB5zo",
-            authDomain: "wordcloud-live-1437f.firebaseapp.com",
-            databaseURL: "https://wordcloud-live-1437f-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "wordcloud-live-1437f",
-            storageBucket: "wordcloud-live-1437f.firebasestorage.app",
-            messagingSenderId: "562249657393",
-            appId: "1:562249657393:web:a5534786a9e3f23b7c3910"
+          apiKey: "AIzaSyD1rqdwZ0VBMDfMEiP_CBP7VUchOcbB5zo",
+          authDomain: "wordcloud-live-1437f.firebaseapp.com",
+          databaseURL: "https://wordcloud-live-1437f-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "wordcloud-live-1437f",
+          storageBucket: "wordcloud-live-1437f.firebasestorage.app",
+          messagingSenderId: "562249657393",
+          appId: "1:562249657393:web:a5534786a9e3f23b7c3910"
         };
         
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
         
-        window.firebaseDB = db;
+        // 初始化 Firebase
+        
+        const firebaseApp =
+        initializeApp(firebaseConfig);
+        
+        
+        const database =
+        getDatabase(firebaseApp);
+        
+        
+        // 提供給下面普通 script 使用
+        
+        window.firebaseDB = database;
+        
         window.firebaseRef = ref;
+        
         window.firebaseSet = set;
+        
         window.firebasePush = push;
+        
         window.firebaseOnValue = onValue;
+        
         window.firebaseUpdate = update;
-        window.firebaseRemove = remove;
-        window.firebaseGet = get;
+        
+        
+        console.log(
+            "Firebase Realtime Database 初始化完成"
+        );
     </script>
+    
     <style>
-        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
-        .canvas-container { position: relative; width: 100%; height: 520px; }
-        #cloud-canvas { width: 100%; height: 100%; }
-        .interactive-card { box-shadow: 0 4px 20px -2px rgba(148, 163, 184, 0.12); }
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            overflow-x: hidden;
+            background-color: #f8fafc;
+            transition: background-color 0.5s ease;
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 520px;
+        }
+        /* 自訂滑動條 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        /* 動態火花上升粒子畫布 */
+        #particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        #cloud-canvas {
+            position: relative;
+            z-index: 2;
+        }
+        /* 互動卡片陰影 */
+        .interactive-card {
+            box-shadow: 0 4px 20px -2px rgba(148, 163, 184, 0.12), 0 2px 8px -1px rgba(148, 163, 184, 0.08);
+        }
     </style>
 </head>
 <body class="text-slate-800 min-h-screen flex flex-col">
 
-    <!-- Header (僅主辦版顯示) -->
-    <header id="host-header" class="bg-white border-b border-slate-100 py-4 px-6 flex justify-between items-center shadow-sm">
-        <h1 class="font-bold text-xl text-indigo-600">即時互動文字雲</h1>
-        <div id="status-badge" class="px-3 py-1 rounded-full bg-slate-50 text-sm font-medium">連線中...</div>
+    <!-- 頂部導覽列 (只在主螢幕公眾版顯示) -->
+    <header id="host-header" class="bg-white border-b border-slate-100 py-4 px-6 sticky top-0 z-30 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-2.5 rounded-xl shadow-lg shadow-indigo-100 flex items-center justify-center">
+                <i class="fa-solid fa-cloud-word text-xl animate-pulse"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">即時互動文字雲 <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold ml-1">P2P 安全版</span></h1>
+                <p class="text-xs text-slate-400">P2P Real-time Secured Interactive Word Cloud</p>
+            </div>
+        </div>
+        
+        <!-- 連線狀態指示徽章 -->
+        <div class="flex items-center gap-4">
+            <div id="status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 text-slate-500 text-sm font-medium border border-slate-100">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
+                </span>
+                <span id="status-text">安全通道啟動中...</span>
+            </div>
+        </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <!-- 控制區 -->
+    <!-- 1. 公眾展示控制端介面 (Host Mode View) -->
+    <main id="host-layout" class="hidden flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- 左側控制面板 -->
         <section class="lg:col-span-5 flex flex-col gap-6">
-            <div class="bg-white p-5 rounded-2xl interactive-card">
-                <input type="text" id="topic-input" class="w-full text-lg font-bold border-b-2 outline-none pb-1" placeholder="輸入題目...">
-                <div id="qrcode" class="mt-4 flex justify-center"></div>
-                <input type="text" id="share-link-input" readonly class="w-full mt-4 p-2 text-xs bg-slate-50 border rounded text-slate-500">
+            
+            <!-- 題目設定 -->
+            <div class="bg-white p-5 rounded-2xl interactive-card border border-slate-100">
+                <div class="flex items-center justify-between mb-3">
+                    <label class="text-sm font-semibold text-slate-500 flex items-center gap-2">
+                        <i class="fa-solid fa-heading text-indigo-500"></i> 設定現場討論題目
+                    </label>
+                    <span class="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-0.5 rounded-md font-semibold">主辦人專區</span>
+                </div>
+                <input type="text" id="topic-input" 
+                       value="今天的心情如何？用三個詞形容！" 
+                       class="w-full text-lg font-bold text-slate-800 border-b-2 border-slate-100 focus:border-indigo-500 outline-none pb-1 transition-all bg-transparent"
+                       placeholder="請輸入一個現場互動題目...">
             </div>
-            <button id="clear-all-btn" class="text-rose-500 hover:text-rose-700">清空所有</button>
-            <button id="load-sample-btn" class="text-indigo-600 border rounded p-2">載入測試範例</button>
+
+            <!-- 安全 P2P 掃描二維碼區域 -->
+            <div class="bg-white p-6 rounded-2xl interactive-card border border-slate-100 flex flex-col items-center text-center">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-qrcode text-indigo-600"></i> 邀請現場觀眾加入輸入
+                </h3>
+                <p class="text-xs text-slate-400 mb-4">請大夥掃描下方隨機安全二維碼，直接進入手機作答頁面！</p>
+                
+                <!-- 二維碼渲染位置 -->
+                <div class="p-3 bg-white border border-slate-100 rounded-2xl shadow-inner mb-4 transition-all hover:scale-105 duration-300">
+                    <div id="qrcode" class="w-[180px] h-[180px] flex flex-col items-center justify-center text-slate-400 text-xs">
+                        <i class="fa-solid fa-spinner animate-spin text-3xl mb-1 block text-indigo-500"></i>
+                        等待產生安全二維碼...
+                    </div>
+                </div>
+
+                <!-- 分享網址複製列 -->
+                <div class="w-full flex items-center gap-1 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                    <input type="text" id="share-link-input" readonly 
+                           class="bg-transparent text-xs text-slate-500 outline-none px-2 flex-1 truncate" value="計算安全連結中...">
+                    <button id="copy-link-btn" class="bg-white hover:bg-indigo-50 border border-slate-200 text-indigo-600 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition active:scale-95">
+                        <i class="fa-regular fa-copy"></i> 複製
+                    </button>
+                </div>
+            </div>
+
+            <!-- 字彙清單與即時權重管理 -->
+            <div class="bg-white p-5 rounded-2xl interactive-card border border-slate-100 flex-1 flex flex-col min-h-[250px]">
+                <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                    <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-list-ol text-amber-500"></i> 即時詞彙與權重
+                    </h3>
+                    <button id="clear-all-btn" class="text-xs text-rose-500 hover:text-rose-700 font-medium transition flex items-center gap-1">
+                        <i class="fa-regular fa-trash-can"></i> 清空所有
+                    </button>
+                </div>
+
+                <!-- 詞彙捲動區域 -->
+                <div class="flex-1 overflow-y-auto max-h-[220px] pr-1 space-y-2" id="words-list-container">
+                    <div class="text-center py-8 text-slate-400 text-xs">
+                        <i class="fa-solid fa-hourglass-start text-2xl mb-2 block animate-pulse"></i>
+                        等待觀眾掃碼輸入第一個詞彙...
+                    </div>
+                </div>
+
+                <!-- 樣品載入按鈕列 -->
+                <div class="mt-4 pt-3 border-t border-slate-100 flex justify-between gap-2">
+                    <button id="load-sample-btn" class="text-xs text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 font-medium transition flex-1">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> 載入測試範例
+                    </button>
+                    <button id="load-fireshow-btn" class="text-xs text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-medium transition flex-1">
+                        <i class="fa-solid fa-fire mr-1"></i> 載入火舞社範例
+                    </button>
+                </div>
+            </div>
         </section>
 
-        <!-- 展示區 -->
-        <section class="lg:col-span-7">
-            <div class="bg-white p-4 rounded-2xl interactive-card h-[500px] flex flex-col">
-                <h2 id="live-topic-title" class="text-2xl font-bold mb-4">等待題目...</h2>
-                <div id="canvas-container" class="flex-1 bg-slate-50 rounded-xl relative">
-                    <canvas id="cloud-canvas"></canvas>
+        <!-- 右側大螢幕文字雲展示 -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+            
+            <!-- 題目展示 -->
+            <div class="bg-white px-6 py-4 rounded-2xl interactive-card border border-slate-100 flex items-center gap-3">
+                <span class="px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg text-xs font-bold tracking-wider shadow-sm animate-pulse">LIVE TOPIC</span>
+                <h2 id="live-topic-title" class="font-bold text-lg text-slate-800 truncate">載入中...</h2>
+            </div>
+
+            <!-- 文字雲畫布容器 -->
+            <div class="bg-white p-4 rounded-2xl interactive-card border border-slate-100 flex-1 flex flex-col relative">
+                
+                <!-- 選單與風格切換 -->
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold text-slate-400">視覺風格：</span>
+                        <div class="flex flex-wrap gap-1" id="theme-selectors">
+                            <button data-theme="modern" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-600 font-medium transition border border-indigo-400">莫蘭迪</button>
+                            <button data-theme="sunset" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-500 font-medium transition border border-transparent">日落橙</button>
+                            <button data-theme="forest" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-500 font-medium transition border border-transparent">森林綠</button>
+                            <button data-theme="fireshow" class="theme-badge px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-500 font-medium transition border border-transparent flex items-center gap-1">火舞社 🔥</button>
+                        </div>
+                    </div>
+
+                    <button id="redraw-btn" class="text-xs text-slate-500 hover:text-indigo-600 font-medium transition flex items-center gap-1 bg-slate-50 hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
+                        <i class="fa-solid fa-arrows-rotate"></i> 隨機排版
+                    </button>
+                </div>
+
+                <!-- 畫布載入預留區 -->
+                <div id="canvas-container" class="canvas-container flex-1 bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center relative">
+                    <div id="canvas-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 z-10 bg-slate-50 transition-all duration-300">
+                        <div class="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500 mb-4 animate-pulse">
+                            <i class="fa-solid fa-cloud text-2xl"></i>
+                        </div>
+                        <h3 class="font-bold text-slate-700 mb-1">等待生成文字雲</h3>
+                        <p class="text-xs text-slate-400 max-w-xs">目前尚未有資料，請讓觀眾掃描左側二維碼送出詞彙！</p>
+                    </div>
+
+                    <!-- 專屬火花上升粒子背景 -->
+                    <canvas id="particle-canvas"></canvas>
+                    <!-- 主要文字雲 Canvas -->
+                    <canvas id="cloud-canvas" class="w-full h-full transition-all duration-300"></canvas>
+                </div>
+
+                <!-- 下方功能列：完成與下載 -->
+                <div class="mt-4 flex gap-3">
+                    <button id="lock-btn" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-md">
+                        <i class="fa-solid fa-lock-open"></i> 鎖定收集 (觀眾將無法再提交)
+                    </button>
+                    <button id="download-btn" disabled class="flex-1 bg-slate-200 text-slate-400 font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 cursor-not-allowed">
+                        <i class="fa-solid fa-download"></i> 下載文字雲圖檔 (PNG)
+                    </button>
                 </div>
             </div>
         </section>
     </main>
 
-    <script>
-        let firebaseRoomId, wordsMap = {};
+    <!-- 2. 手機端輸入介面 (Participant View - 網址含有 `?view=input`) -->
+    <main id="user-layout" class="hidden flex-1 max-w-md w-full mx-auto p-4 md:p-6 flex flex-col justify-center gap-6">
         
-        function escapeHtml(str) {
-            return String(str).replace(/[&<>"']/g, s => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[s]));
+        <div id="user-card-container" class="bg-white p-6 rounded-3xl shadow-xl border border-slate-100 flex flex-col gap-6 transition-all duration-500 relative overflow-hidden">
+            
+            <!-- 手機上升火花粒子畫布(火舞社風格時同步啟動) -->
+            <canvas id="user-particle-canvas" class="absolute inset-0 w-full h-full pointer-events-none opacity-40 z-0"></canvas>
+            
+            <div class="z-10 flex flex-col gap-4">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm" id="user-status-badge">
+                        <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        連線大螢幕中...
+                    </span>
+                    <i class="fa-solid fa-fire-flame-curved text-amber-500 text-lg animate-bounce hidden" id="user-fire-icon"></i>
+                </div>
+
+                <!-- 即時同步題目 -->
+                <div class="border-b border-slate-100 pb-3">
+                    <p class="text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">互動討論主題</p>
+                    <h2 id="user-topic" class="text-xl font-bold text-slate-800 leading-snug">載入大螢幕主題中...</h2>
+                </div>
+
+                <!-- 使用者回答對話框 -->
+                <div class="space-y-4">
+                    <label class="block text-sm font-semibold text-slate-500">
+                        <i class="fa-regular fa-keyboard text-indigo-500 mr-1"></i> 輸入你的回答：
+                    </label>
+                    <textarea id="user-answer-input" rows="4" 
+                              class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition text-base resize-none shadow-inner bg-slate-50"
+                              placeholder="請輸入一個或多個詞彙 (可用空格或換行隔開多個詞彙)"></textarea>
+                    
+                    <button id="user-submit-btn" 
+                            class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-indigo-100 transition duration-150 flex items-center justify-center gap-2 active:scale-95">
+                        <i class="fa-solid fa-paper-plane"></i> 立即送出答案
+                    </button>
+                </div>
+            </div>
+
+            <!-- 鎖定覆蓋面板（主辦人關閉收集時顯示） -->
+            <div id="user-lock-overlay" class="absolute inset-0 bg-slate-900/40 backdrop-blur-md hidden flex-col items-center justify-center text-center p-6 z-20 transition-all duration-300">
+                <div class="bg-white p-6 rounded-2xl shadow-2xl max-w-xs border border-slate-100 flex flex-col items-center">
+                    <div class="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center text-2xl mb-4 animate-bounce">
+                        <i class="fa-solid fa-lock"></i>
+                    </div>
+                    <h4 class="font-bold text-slate-800 text-lg mb-1">主辦人已關閉收集</h4>
+                    <p class="text-xs text-slate-500 leading-relaxed">此討論題目已鎖定。請直接在大螢幕上觀賞大家共同產出的文字雲成果！</p>
+                </div>
+            </div>
+
+            <!-- 送出成功覆蓋面板 -->
+            <div id="user-success-overlay" class="absolute inset-0 bg-white/95 backdrop-blur-sm hidden flex-col items-center justify-center text-center p-6 z-20 transition-all duration-300">
+                <div class="flex flex-col items-center max-w-xs">
+                    <div class="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center text-2xl mb-4 animate-ping">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <h4 class="font-bold text-slate-800 text-lg mb-1">答案已飛入大螢幕！</h4>
+                    <p class="text-xs text-slate-400 mb-5 leading-relaxed">您的想法已經即時與大家融合，快看公眾展示版！</p>
+                    <button id="user-go-again-btn" class="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-4 py-2 rounded-xl text-xs font-bold transition">
+                        <i class="fa-solid fa-plus mr-1"></i> 再寫一個答案
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 手機端腳註 -->
+        <p class="text-center text-slate-400 text-xs mt-2">
+            互動文字雲系統 • P2P 端到端安全加密傳輸
+        </p>
+    </main>
+
+    <!-- Toast 通知組件 -->
+    <div id="toast-message" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-50 transition-all duration-300">
+        <span id="toast-icon"></span>
+        <span id="toast-text" class="text-sm font-medium">提示訊息</span>
+    </div>
+
+    <!-- P2P 系統核心整合程式碼 -->
+    <script>
+        // --- 安全過濾函式 (防止 XSS 惡意指令注入) ---
+        function escapeHtml(string) {
+            return String(string).replace(/[&<>"']/g, function (s) {
+                return {
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[s];
+            });
         }
 
-        function showToast(msg) { alert(msg); }
+        // --- 全域變數與系統狀態 ---
+        let viewRole = 'host'; // 'host' 或 'input'
+        let currentTheme = 'modern';
+        let topic = '今天的心情如何？用三個詞形容！';
+        let isLocked = false;
+        let wordsMap = {}; // 字詞與權重對應表
 
-        window.onload = () => {
-            const params = new URLSearchParams(window.location.search);
-            const roomId = params.get('room');
-            
-            if (params.get('view') === 'input' && roomId) {
-                // 手機輸入端邏輯 (略，專注於主辦端)
+        // --- Firebase Realtime Database 連線變數 ---
+        let firebaseRoomId = null;
+        // 目前所在 Firebase 房間
+        let firebaseRoomRef = null;
+        // 房間資料 reference
+
+
+        // --- 粒子特效變數 ---
+        let hostParticleId = null;
+        let userParticleId = null;
+        const hostEmbers = [];
+        const userEmbers = [];
+
+        // --- 美學主題調色盤 ---
+        const palettes = {
+            modern: {
+                bg: '#f8fafc',
+                colors: ['#6366f1', '#4f46e5', '#8b5cf6', '#d946ef', '#ec4899', '#06b6d4', '#14b8a6'],
+                bodyBg: '#f8fafc'
+            },
+            sunset: {
+                bg: '#fffbeb',
+                colors: ['#f97316', '#ea580c', '#dd6b20', '#e11d48', '#be123c', '#ca8a04', '#b45309'],
+                bodyBg: '#fffbeb'
+            },
+            forest: {
+                bg: '#f0fdf4',
+                colors: ['#16a34a', '#15803d', '#14532d', '#0d9488', '#0f766e', '#0369a1', '#65a30d'],
+                bodyBg: '#f0fdf4'
+            },
+            fireshow: {
+                bg: '#140502', // 夜幕暗夜火舞紅
+                colors: ['#ff4500', '#ff8c00', '#ff3333', '#ffd700', '#ff6347', '#ff1493', '#ffa500'],
+                bodyBg: '#140502'
+            }
+        };
+
+        // --- 初始化入口 ---
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomId = urlParams.get('room');
+
+            if (urlParams.get('view') === 'input' && roomId) {
+                // 1. 手機輸入端
+                viewRole = 'input';
+                document.getElementById('user-layout').classList.remove('hidden');
+                document.getElementById('host-header').classList.add('hidden');
+                initFirebaseClient(roomId);
             } else {
-                initHost();
+                // 2. 主辦大螢幕端
+                viewRole = 'host';
+                document.getElementById('host-layout').classList.remove('hidden');
+                initFirebaseHost();
             }
         };
 
-        function initHost() {
-            firebaseRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const roomRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}`);
+        // ==========================================
+        // 🔥 Firebase Realtime Database - 主辦端 Host
+        // ==========================================
+            function initFirebaseHost() {
+                // 1. 產生 6 碼隨機房間 ID
+                firebaseRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                firebaseRoomRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}`);
             
-            firebaseSet(roomRef, { topic: "今天的心情如何？", answers: {} });
+                console.log("建立 Firebase Room:", firebaseRoomId);
             
-            const inviteUrl = `${window.location.origin}${window.location.pathname}?view=input&room=${firebaseRoomId}`;
-            document.getElementById("share-link-input").value = inviteUrl;
-            new QRCode(document.getElementById("qrcode"), inviteUrl);
-
-            // 監聽答案
-            firebaseOnValue(firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`), (snapshot) => {
-                wordsMap = {};
-                snapshot.forEach(child => {
-                    const word = child.val().word;
-                    wordsMap[word] = (wordsMap[word] || 0) + 1;
+                // 2. 寫入初始房間資料
+                firebaseSet(firebaseRoomRef, {
+                    topic: topic,
+                    theme: currentTheme,
+                    isLocked: false,
+                    createdAt: Date.now(),
+                    words: {}
                 });
-                renderCloud();
-            });
-        }
-
-        function renderCloud() {
-            const list = Object.entries(wordsMap);
-            if (list.length === 0) return;
             
-            WordCloud(document.getElementById('cloud-canvas'), {
-                list: list,
-                gridSize: 8,
-                weightFactor: 20,
-                color: 'random-dark'
+                // 3. 處理邀請連結與 QR Code
+                const inviteUrl = `${window.location.href.split("?")[0]}?view=input&room=${firebaseRoomId}`;
+                
+                // 更新 UI 輸入框
+                const shareLinkInput = document.getElementById("share-link-input");
+                if (shareLinkInput) shareLinkInput.value = inviteUrl;
+            
+                // 產生 QR Code
+                renderQRCode(inviteUrl);
+            
+                // 4. 更新 UI 狀態顯示
+                updateStatusUI(firebaseRoomId);
+            
+                // 5. 啟動監聽與介面邏輯
+                listenFirebaseRoom();
+                listenFirebaseAnswers();
+                setupHostView();
+            }
+            // ==========================================
+            // Firebase 房間設定同步
+            // ==========================================
+            function listenFirebaseRoom() {
+                firebaseOnValue(firebaseRoomRef, (snapshot) => {
+                    const data = snapshot.val();
+                    
+                    // 若資料不存在，直接跳過
+                    if (!data) return;
+            
+                    // 解構賦值：從 data 中取出需要的屬性，若屬性不存在則使用預設值
+                    const { topic, theme, isLocked } = data;
+            
+                    // 同步至 UI 或後續邏輯
+                    handleConfigUpdate({
+                        topic: topic || "未命名主題",
+                        theme: theme || "default",
+                        isLocked: !!isLocked // 強制轉換為布林值
+                    });
+                });
+            }
+            // ==========================================
+            // Firebase 即時答案監聽
+            // ==========================================        
+            function listenFirebaseAnswers() {
+                const answerRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
+            
+                firebaseOnValue(answerRef, (snapshot) => {
+                    // 重置統計地圖
+                    wordsMap = {};
+            
+                    // 遍歷所有回答並統計頻率
+                    snapshot.forEach((item) => {
+                        const data = item.val();
+                        
+                        // 確保有資料且進行 XSS 防護
+                        if (data?.word) {
+                            const cleanWord = escapeHtml(data.word);
+                            
+                            // 計算詞彙出現次數
+                            wordsMap[cleanWord] = (wordsMap[cleanWord] || 0) + 1;
+                        }
+                    });
+            
+                    // 觸發 UI 更新
+                    renderWordsList();
+                    renderWordCloud();
+                });
+            }            
+            /**
+             * 封裝 QR Code 渲染邏輯
+             */
+            function renderQRCode(url) {
+                const qrBox = document.getElementById("qrcode");
+                if (!qrBox) return;
+                
+                qrBox.innerHTML = "";
+                new QRCode(qrBox, {
+                    text: url,
+                    width: 180,
+                    height: 180,
+                    colorDark: "#0f172a",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            }
+            
+            /**
+             * 封裝狀態 UI 更新邏輯
+             */
+            function updateStatusUI(roomId) {
+                const statusText = document.getElementById("status-text");
+                const statusBadge = document.getElementById("status-badge");
+            
+                if (statusText) {
+                    statusText.innerText = `Firebase 即時通道已建立 (房間: ${roomId})`;
+                }
+                
+                if (statusBadge) {
+                    statusBadge.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-sm font-medium border border-emerald-100";
+                }
+            }
+
+        // ==========================================
+        // Firebase 更新房間設定
+        // ==========================================
+        function updateFirebaseConfig() {
+        
+            if (!firebaseRoomId) return;
+            firebaseUpdate(
+                firebaseRoomRef,
+                {
+                    topic: topic,
+                    theme: currentTheme,
+                    isLocked: isLocked
+                }
+            );
+        }
+
+        // ==========================================
+        // 🔥 Firebase Realtime Database - 手機端 Client
+        // ==========================================
+        function initFirebaseClient(roomId) {
+            firebaseRoomId = roomId;
+            firebaseRoomRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}`);
+        
+            console.log("加入 Firebase Room:", firebaseRoomId);
+        
+            // 監聽房間資料變更
+            firebaseOnValue(firebaseRoomRef, (snapshot) => {
+                const data = snapshot.val();
+        
+                // 防禦性檢查：若房間不存在
+                if (!data) {
+                    showToast("找不到此互動房間，請重新掃描 QR Code！", "error");
+                    return;
+                }
+        
+                // 同步房間設定
+                handleConfigUpdate({
+                    topic: data.topic,
+                    theme: data.theme,
+                    isLocked: data.isLocked
+                });
+        
+                // 更新連線狀態 UI
+                updateUserConnectionUI();
+            });
+        
+            // 啟動手機端 UI 互動邏輯
+            setupUserView();
+        }
+        
+        /**
+         * 更新手機端連線狀態的 UI
+         */
+        function updateUserConnectionUI() {
+            const badge = document.getElementById("user-status-badge");
+            if (!badge) return;
+        
+            badge.className = "text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm";
+            badge.innerHTML = `
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                已連線大螢幕
+            `;
+        }
+        // ==========================================
+        // Firebase 傳送答案
+        // ==========================================
+        function sendAnswerToHost(processedWords) {
+            if (!firebaseRoomId || !processedWords?.length) {
+                return false;
+            }
+        
+            const answerRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
+        
+            // 透過 Firebase Push 將每個詞彙存入資料庫
+            processedWords.forEach((word) => {
+                firebasePush(answerRef, {
+                    word: word,
+                    time: Date.now()
+                });
+            });
+        
+            return true;
+        }
+        
+
+        // ==========================================
+        // 🎨 網頁 UI 事件與渲染設定 (主辦端)
+        // ==========================================
+        function setupHostView() {
+            // 複製分享連結
+            document.getElementById('copy-link-btn').addEventListener('click', () => {
+                const input = document.getElementById('share-link-input');
+                input.select();
+                document.execCommand('copy');
+                showToast("專屬同步連結已複製，可傳送給他人！", "success");
+            });
+
+            // 風格主題切換
+            document.querySelectorAll('.theme-badge').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    currentTheme = e.currentTarget.getAttribute('data-theme');
+                    updateFirebaseConfig(); 
+                    handleConfigUpdate({ topic, theme: currentTheme, isLocked });
+                });
+            });
+
+            // 編輯題目監聽
+            document.getElementById('topic-input').addEventListener('input', (e) => {
+                topic = e.target.value.trim() || "未命名討論題目";
+                updateFirebaseConfig(); 
+                document.getElementById('live-topic-title').innerText = topic;
+            });
+
+            // 鎖定/解鎖收集
+            document.getElementById('lock-btn').addEventListener('click', () => {
+                isLocked = !isLocked;
+                updateFirebaseConfig(); 
+                handleConfigUpdate({ topic, theme: currentTheme, isLocked });
+            });
+
+            // 下載 PNG 按鈕
+            document.getElementById('download-btn').addEventListener('click', () => {
+                downloadCloudPNG();
+            });
+
+            // 隨機重排
+            document.getElementById('redraw-btn').addEventListener('click', () => {
+                renderWordCloud();
+                showToast("已重新隨機編排版面！", "success");
+            });
+
+            // 範例資料載入
+            document.getElementById('load-sample-btn').addEventListener('click', () => {
+                loadBulkSampleData('normal');
+            });
+            document.getElementById('load-fireshow-btn').addEventListener('click', () => {
+                loadBulkSampleData('fireshow');
+            });
+
+            // 清空所有資料
+            document.getElementById('clear-all-btn').addEventListener('click', async () => {
+                // 1. 本地重置
+                wordsMap = {};
+                renderWordsList();
+                renderWordCloud();
+            
+                // 2. 遠端同步重置
+                if (firebaseRoomId) {
+                    try {
+                        const answersRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
+                        await firebaseSet(answersRef, null);
+                        showToast("已清空所有詞彙！", "info");
+                    } catch (error) {
+                        console.error("清空失敗:", error);
+                        showToast("清空失敗，請稍後再試", "error");
+                    }
+                }
+            });
+
+            // 視窗自適應
+            const resizeObserver = new ResizeObserver(() => {
+                renderWordCloud();
+            });
+            resizeObserver.observe(document.getElementById('canvas-container'));
+
+            document.getElementById('live-topic-title').innerText = topic;
+        }
+
+        // ==========================================
+        // 📱 手機端作答 UI 設定
+        // ==========================================
+        function setupUserView() {
+            // 送出按鈕
+            document.getElementById('user-submit-btn').addEventListener('click', () => {
+                submitUserAnswer();
+            });
+
+            // 再寫一個
+            document.getElementById('user-go-again-btn').addEventListener('click', () => {
+                document.getElementById('user-success-overlay').classList.add('hidden');
+                document.getElementById('user-success-overlay').classList.remove('flex');
+                document.getElementById('user-answer-input').value = '';
+                document.getElementById('user-answer-input').focus();
             });
         }
 
-        document.getElementById('clear-all-btn').onclick = () => {
-            if(confirm("確定清空？")) {
-                firebaseRemove(firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`));
-                wordsMap = {};
-                renderCloud();
+        // 手機端提交作答與防護
+        function submitUserAnswer() {
+            if (isLocked) {
+                showToast("收集已關閉，無法提交答案喔！", "warning");
+                return;
             }
+
+            const inputEl = document.getElementById('user-answer-input');
+            const text = inputEl.value.trim();
+
+            if (!text) {
+                showToast("請輸入點想法再送出喔！", "warning");
+                return;
+            }
+
+            // 用空白、換行或逗點拆開多個單字
+            const regex = /[\s,，、\n\r\t]+/;
+            const newWords = text.split(regex).map(w => w.trim()).filter(w => w.length > 0);
+
+            if (newWords.length === 0) {
+                showToast("無效的詞彙，請重新輸入！", "warning");
+                return;
+            }
+
+            // 嚴格限制每個字詞最大長度為 15 字，防止大螢幕被撐開爆版
+            const processedWords = newWords.map(w => w.substring(0, 15));
+
+            // 送出點對點 P2P 數據
+            const success = sendAnswerToHost(processedWords);
+            if (success) {
+                document.getElementById('user-success-overlay').classList.remove('hidden');
+                document.getElementById('user-success-overlay').classList.add('flex');
+            } else {
+                showToast("傳輸通道中斷，送出失敗！", "error");
+            }
+        }
+
+        // ==========================================
+        // 🔄 雙端同步邏輯分發
+        // ==========================================
+        function handleConfigUpdate(config) {
+            topic = config.topic;
+            currentTheme = config.theme;
+            isLocked = config.isLocked;
+
+            const palette = palettes[currentTheme];
+            document.body.style.backgroundColor = palette.bodyBg;
+
+            if (viewRole === 'host') {
+                // --- 主辦大螢幕端 UI 更新 ---
+                document.getElementById('live-topic-title').innerText = topic;
+                
+                const lockBtn = document.getElementById('lock-btn');
+                const downloadBtn = document.getElementById('download-btn');
+                const statusBadge = document.getElementById('status-badge');
+                const statusText = document.getElementById('status-text');
+
+                if (isLocked) {
+                    lockBtn.innerHTML = `<i class="fa-solid fa-lock"></i> 開啟收集 (解鎖)`;
+                    lockBtn.className = "flex-1 bg-rose-600 hover:bg-rose-700 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-md";
+                    downloadBtn.removeAttribute('disabled');
+                    downloadBtn.className = "flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 active:scale-95";
+                    
+                    statusBadge.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 text-rose-600 text-sm font-medium border border-rose-100";
+                    statusText.innerText = `收集已鎖定 (房號：${firebaseRoomId})`;
+                } else {
+                    lockBtn.innerHTML = `<i class="fa-solid fa-lock-open"></i> 鎖定收集 (觀眾將無法再提交)`;
+                    lockBtn.className = "flex-1 bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-md";
+                    downloadBtn.setAttribute('disabled', 'true');
+                    downloadBtn.className = "flex-1 bg-slate-200 text-slate-400 font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 cursor-not-allowed";
+                    
+                    statusBadge.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-sm font-medium border border-emerald-100";
+                    statusText.innerText =`Firebase 即時同步中 (房號：${firebaseRoomId})`;
+                }
+
+                // 更新選中的主題標籤高亮
+                document.querySelectorAll('.theme-badge').forEach(btn => {
+                    btn.classList.remove('border-indigo-400', 'text-indigo-600', 'border-amber-500', 'text-amber-500', 'bg-indigo-50', 'bg-amber-50/10');
+                    btn.classList.add('border-transparent', 'text-slate-500', 'bg-slate-100');
+                });
+                const activeBtn = document.querySelector(`[data-theme="${currentTheme}"]`);
+                if (activeBtn) {
+                    activeBtn.classList.remove('border-transparent', 'text-slate-500', 'bg-slate-100');
+                    if (currentTheme === 'fireshow') {
+                        activeBtn.classList.add('border-amber-500', 'text-amber-500', 'bg-amber-50/10');
+                    } else {
+                        activeBtn.classList.add('border-indigo-400', 'text-indigo-600', 'bg-indigo-50');
+                    }
+                }
+
+                renderWordCloud();
+            } else {
+                // --- 手機端同步 UI 更新 ---
+                document.getElementById('user-topic').innerText = topic;
+
+                // 手機鎖定遮罩
+                const lockOverlay = document.getElementById('user-lock-overlay');
+                if (isLocked) {
+                    lockOverlay.classList.remove('hidden');
+                    lockOverlay.classList.add('flex');
+                } else {
+                    lockOverlay.classList.add('hidden');
+                    lockOverlay.classList.remove('flex');
+                }
+
+                // 配合大螢幕主題，手機端同步轉換「火舞社 🔥」動態背景
+                const userCard = document.getElementById('user-card-container');
+                const userStatusBadge = document.getElementById('user-status-badge');
+                const userSubmitBtn = document.getElementById('user-submit-btn');
+                const userFireIcon = document.getElementById('user-fire-icon');
+
+                if (currentTheme === 'fireshow') {
+                    userCard.className = "bg-[#140502] p-6 rounded-3xl shadow-2xl border border-amber-900/50 flex flex-col gap-6 transition-all duration-500 relative overflow-hidden text-white";
+                    userStatusBadge.className = "text-xs font-bold text-amber-500 bg-amber-950/40 px-2.5 py-1 rounded-full flex items-center gap-1.5 border border-amber-900";
+                    userSubmitBtn.className = "w-full bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-700 hover:to-amber-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-orange-950/50 transition duration-150 flex items-center justify-center gap-2 active:scale-95";
+                    userFireIcon.classList.remove('hidden');
+                    initUserFireshowParticles();
+                } else {
+                    userCard.className = "bg-white p-6 rounded-3xl shadow-xl border border-slate-100 flex flex-col gap-6 transition-all duration-500 relative overflow-hidden text-slate-800";
+                    userStatusBadge.className = "text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm";
+                    userSubmitBtn.className = "w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-indigo-100 transition duration-150 flex items-center justify-center gap-2 active:scale-95";
+                    userFireIcon.classList.add('hidden');
+                    stopUserFireshowParticles();
+                }
+            }
+        }
+
+        // ==========================================
+        // 📊 詞彙清單管理（後台微調功能）
+        // ==========================================
+        function renderWordsList() {
+            const container = document.getElementById('words-list-container');
+            const sortedWords = Object.entries(wordsMap).sort((a, b) => b[1] - a[1]);
+
+            if (sortedWords.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-slate-400 text-xs">
+                        <i class="fa-solid fa-hourglass-start text-2xl mb-2 block animate-pulse"></i>
+                        等待觀眾掃碼輸入第一個詞彙...
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '<div class="space-y-1.5">';
+            sortedWords.forEach(([word, count]) => {
+                html += `
+                    <div class="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-xl hover:bg-slate-100/80 transition border border-slate-100">
+                        <span class="font-medium text-slate-700 text-sm truncate max-w-[150px]" title="${word}">${word}</span>
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center bg-white rounded-lg border border-slate-200 text-xs overflow-hidden shadow-sm">
+                                <button onclick="window.modifyWeightDirectly('${word}', -1)" ${isLocked ? 'disabled' : ''} class="px-2 py-1 hover:bg-slate-50 text-slate-500 disabled:opacity-50"><i class="fa-solid fa-minus"></i></button>
+                                <span class="px-2.5 font-bold text-indigo-600">${count} 次</span>
+                                <button onclick="window.modifyWeightDirectly('${word}', 1)" ${isLocked ? 'disabled' : ''} class="px-2 py-1 hover:bg-slate-50 text-slate-500 disabled:opacity-50"><i class="fa-solid fa-plus"></i></button>
+                            </div>
+                            <button onclick="window.deleteWordDirectly('${word}')" ${isLocked ? 'disabled' : ''} class="text-rose-400 hover:text-rose-600 p-1.5 transition disabled:opacity-50">
+                                <i class="fa-regular fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // 手動增減權重
+        window.modifyWeightDirectly = function(word, offset) {
+            if (isLocked) return;
+            const newCount = (wordsMap[word] || 0) + offset;
+            if (newCount <= 0) {
+                delete wordsMap[word];
+            } else {
+                wordsMap[word] = newCount;
+            }
+            renderWordsList();
+            renderWordCloud();
         };
 
-        document.getElementById('load-sample-btn').onclick = () => {
-            const ref = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
-            const samples = ["開心", "快樂", "興奮", "開心", "期待"];
-            samples.forEach(word => firebasePush(ref, { word, time: Date.now() }));
+        // 後台刪除單字
+        window.deleteWordDirectly = function(word) {
+            if (isLocked) return;
+            delete wordsMap[word];
+            renderWordsList();
+            renderWordCloud();
+            showToast(`已將「${word}」完全移除`, "info");
         };
 
-        document.getElementById('topic-input').oninput = (e) => {
-            const val = e.target.value;
-            document.getElementById('live-topic-title').innerText = val;
-            firebaseUpdate(firebaseRef(firebaseDB, `rooms/${firebaseRoomId}`), { topic: val });
-        };
+        // ==========================================
+        // 🧪 範例資料一鍵載入
+        // ==========================================
+        function loadBulkSampleData(type) {
+            if (isLocked) return;
+            if (type === 'fireshow') {
+                wordsMap = {
+                    "火舞": 24, "烈焰": 19, "熱血": 16, "安全第一": 17, "火繩": 12,
+                    "火棍": 14, "火扇": 11, "璀璨": 15, "極限": 10, "狂熱": 13,
+                    "燃燒靈魂": 14, "夥伴": 11, "熱情": 12, "火圈": 8, "安全員": 11
+                };
+                topic = "談起「火舞社」，你腦中浮現的第一印象？";
+                currentTheme = "fireshow";
+            } else {
+                wordsMap = {
+                    "開心": 18, "充滿能量": 14, "放鬆": 12, "學習": 15, "成長": 11,
+                    "幸福": 9, "加油": 10, "元氣滿滿": 13, "突破": 7, "正能量": 10
+                };
+                topic = "今天的心情如何？用三個詞形容！";
+                currentTheme = "modern";
+            }
+            document.getElementById('topic-input').value = topic;
+            updateFirebaseConfig();
+            handleConfigUpdate({ topic, theme: currentTheme, isLocked });
+            renderWordsList();
+            renderWordCloud();
+            showToast("樣品資料載入完成！並已即時同步到所有觀眾手機！", "success");
+        }
+
+        // ==========================================
+        // 🔥 動態火花上升粒子特效 (大螢幕端)
+        // ==========================================
+        function initFireshowParticles() {
+            const canvas = document.getElementById('particle-canvas');
+            if (!canvas) return;
+
+            const rect = canvas.parentNode.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+
+            hostEmbers.length = 0;
+            const numParticles = 40;
+
+            for (let i = 0; i < numParticles; i++) {
+                hostEmbers.push({
+                    x: Math.random() * canvas.width,
+                    y: canvas.height + Math.random() * 100,
+                    size: Math.random() * 3 + 1,
+                    speedY: -(Math.random() * 1.5 + 0.5),
+                    speedX: (Math.random() - 0.5) * 1,
+                    alpha: Math.random() * 0.7 + 0.3,
+                    color: Math.random() > 0.5 ? '#ff4500' : '#ffa500'
+                });
+            }
+
+            function animate() {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                hostEmbers.forEach(p => {
+                    p.y += p.speedY;
+                    p.x += p.speedX;
+                    
+                    if (p.y < 0) {
+                        p.y = canvas.height + 10;
+                        p.x = Math.random() * canvas.width;
+                    }
+
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.shadowBlur = p.size * 2;
+                    ctx.shadowColor = p.color;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                });
+
+                hostParticleId = requestAnimationFrame(animate);
+            }
+
+            if (hostParticleId) cancelAnimationFrame(hostParticleId);
+            animate();
+        }
+
+        function stopFireshowParticles() {
+            if (hostParticleId) {
+                cancelAnimationFrame(hostParticleId);
+                hostParticleId = null;
+            }
+            const canvas = document.getElementById('particle-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        // ==========================================
+        // 🔥 手機端同步粒子特效
+        // ==========================================
+        function initUserFireshowParticles() {
+            const canvas = document.getElementById('user-particle-canvas');
+            if (!canvas) return;
+
+            const rect = canvas.parentNode.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+
+            userEmbers.length = 0;
+            const numParticles = 15;
+
+            for (let i = 0; i < numParticles; i++) {
+                userEmbers.push({
+                    x: Math.random() * canvas.width,
+                    y: canvas.height + Math.random() * 100,
+                    size: Math.random() * 2 + 1,
+                    speedY: -(Math.random() * 1.0 + 0.3),
+                    speedX: (Math.random() - 0.5) * 0.5,
+                    alpha: Math.random() * 0.5 + 0.2,
+                    color: Math.random() > 0.5 ? '#ff5722' : '#ffeb3b'
+                });
+            }
+
+            function animate() {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                userEmbers.forEach(p => {
+                    p.y += p.speedY;
+                    p.x += p.speedX;
+                    
+                    if (p.y < 0) {
+                        p.y = canvas.height + 10;
+                        p.x = Math.random() * canvas.width;
+                    }
+
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                });
+
+                userParticleId = requestAnimationFrame(animate);
+            }
+
+            if (userParticleId) cancelAnimationFrame(userParticleId);
+            animate();
+        }
+
+        function stopUserFireshowParticles() {
+            if (userParticleId) {
+                cancelAnimationFrame(userParticleId);
+                userParticleId = null;
+            }
+            const canvas = document.getElementById('user-particle-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        // ==========================================
+        // ☁️ 繪製文字雲 Canvas 主程序
+        // ==========================================
+        function renderWordCloud() {
+            const canvas = document.getElementById('cloud-canvas');
+            const container = document.getElementById('canvas-container');
+            const placeholder = document.getElementById('canvas-placeholder');
+
+            if (!canvas || !container) return;
+
+            const list = Object.entries(wordsMap);
+
+            if (list.length === 0) {
+                placeholder.classList.remove('opacity-0', 'pointer-events-none');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                stopFireshowParticles();
+                return;
+            }
+
+            placeholder.classList.add('opacity-0', 'pointer-events-none');
+
+            const dpr = window.devicePixelRatio || 1;
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+
+            const activePalette = palettes[currentTheme];
+            const themeBg = activePalette.bg;
+
+            // 觸發火舞社動態粒子
+            if (currentTheme === 'fireshow') {
+                initFireshowParticles();
+            } else {
+                stopFireshowParticles();
+            }
+
+            const maxWeight = Math.max(...list.map(w => w[1]));
+            let weightFactor = (canvas.width / 11) / Math.max(maxWeight, 1);
+            weightFactor = Math.max(6, Math.min(weightFactor, 55));
+
+            const options = {
+                list: list,
+                gridSize: Math.round(12 * dpr),
+                weightFactor: weightFactor * dpr,
+                fontFamily: '"Inter", "Noto Sans TC", "Microsoft JhengHei", sans-serif',
+                fontWeight: '700',
+                color: function() {
+                    const colors = activePalette.colors;
+                    return colors[Math.floor(Math.random() * colors.length)];
+                },
+                backgroundColor: themeBg,
+                rotateRatio: currentTheme === 'fireshow' ? 0.5 : 0.35,
+                rotationSteps: 3,
+                minSize: 10 * dpr,
+                drawOutOfBound: false,
+                shuffle: true,
+                ellipticity: 0.8
+            };
+
+            WordCloud(canvas, options);
+        }
+
+        // ==========================================
+        // 💾 下載高清 PNG 檔案 (含浮水印)
+        // ==========================================
+        function downloadCloudPNG() {
+            if (!isLocked) {
+                showToast("請先點選「鎖定收集」後再下載圖檔！", "warning");
+                return;
+            }
+
+            const canvas = document.getElementById('cloud-canvas');
+            const exportCanvas = document.createElement('canvas');
+            const ctx = exportCanvas.getContext('2d');
+            
+            exportCanvas.width = canvas.width;
+            exportCanvas.height = canvas.height;
+            
+            const activePalette = palettes[currentTheme];
+            ctx.fillStyle = activePalette.bg;
+            ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+            if (currentTheme === 'fireshow') {
+                hostEmbers.forEach(p => {
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha * 0.4;
+                    ctx.shadowBlur = p.size * 4;
+                    ctx.shadowColor = p.color;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    const scale = exportCanvas.width / canvas.clientWidth;
+                    ctx.arc((p.x * scale), (p.y * scale), p.size * scale, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                });
+            }
+            
+            ctx.drawImage(canvas, 0, 0);
+            
+            const isDarkBg = (currentTheme === 'fireshow');
+            ctx.fillStyle = isDarkBg ? 'rgba(255, 255, 255, 0.55)' : 'rgba(15, 23, 42, 0.65)';
+            ctx.font = `bold ${Math.round(20 * (window.devicePixelRatio || 1))}px "Noto Sans TC", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`主題：${topic}`, exportCanvas.width / 2, Math.round(35 * (window.devicePixelRatio || 1)));
+            
+            try {
+                const link = document.createElement('a');
+                link.download = `文字雲_${topic.replace(/[\\/:*?"<>|]/g, "_")}.png`;
+                link.href = exportCanvas.toDataURL('image/png');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast("PNG 文字雲圖檔下載成功！", "success");
+            } catch (err) {
+                console.error(err);
+                showToast("下載失敗，可能受到安全政策限制。", "error");
+            }
+        }
+
+        // 精美自訂 Toast 提示
+        function showToast(message, type = "success") {
+            const toast = document.getElementById('toast-message');
+            const icon = document.getElementById('toast-icon');
+            const text = document.getElementById('toast-text');
+
+            text.innerText = message;
+
+            if (type === "success") {
+                icon.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>';
+            } else if (type === "warning") {
+                icon.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-400 text-lg"></i>';
+            } else if (type === "error") {
+                icon.innerHTML = '<i class="fa-solid fa-circle-xmark text-rose-400 text-lg"></i>';
+            } else {
+                icon.innerHTML = '<i class="fa-solid fa-circle-info text-sky-400 text-lg"></i>';
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+                toast.classList.remove('translate-y-0', 'opacity-100');
+            }, 3500);
+        }
     </script>
 </body>
 </html>
