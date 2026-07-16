@@ -417,6 +417,7 @@
 
             // 監聽手機端的安全 P2P 連入
             peerInstance.on('connection', (conn) => {
+                console.log("有人連進來", conn.peer);
                 console.log("Client Connected:", conn.peer);
                 p2pConnections.push(conn);
 
