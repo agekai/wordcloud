@@ -553,19 +553,20 @@
                 }
             }
 
-        // 發送同步資訊至所有當前 P2P 連線中的手機端
-        function broadcastConfig() {
-            const configPayload = {
-                type: 'sync',
-                topic: topic,
-                theme: currentTheme,
-                isLocked: isLocked
-            };
-            p2pConnections.forEach(conn => {
-                if (conn.open) {
-                    conn.send(configPayload);
+        // ==========================================
+        // Firebase 更新房間設定
+        // ==========================================
+        function updateFirebaseConfig() {
+        
+            if (!firebaseRoomId) return;
+            firebaseUpdate(
+                firebaseRoomRef,
+                {
+                    topic: topic,
+                    theme: currentTheme,
+                    isLocked: isLocked
                 }
-            });
+            );
         }
 
         // ==========================================
@@ -653,7 +654,7 @@
             document.querySelectorAll('.theme-badge').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     currentTheme = e.currentTarget.getAttribute('data-theme');
-                    broadcastConfig(); 
+                    updateFirebaseConfig(); 
                     handleConfigUpdate({ topic, theme: currentTheme, isLocked });
                 });
             });
@@ -661,14 +662,14 @@
             // 編輯題目監聽
             document.getElementById('topic-input').addEventListener('input', (e) => {
                 topic = e.target.value.trim() || "未命名討論題目";
-                broadcastConfig(); 
+                updateFirebaseConfig(); 
                 document.getElementById('live-topic-title').innerText = topic;
             });
 
             // 鎖定/解鎖收集
             document.getElementById('lock-btn').addEventListener('click', () => {
                 isLocked = !isLocked;
-                broadcastConfig(); 
+                updateFirebaseConfig(); 
                 handleConfigUpdate({ topic, theme: currentTheme, isLocked });
             });
 
@@ -692,11 +693,23 @@
             });
 
             // 清空所有資料
-            document.getElementById('clear-all-btn').addEventListener('click', () => {
+            document.getElementById('clear-all-btn').addEventListener('click', async () => {
+                // 1. 本地重置
                 wordsMap = {};
                 renderWordsList();
                 renderWordCloud();
-                showToast("已清空大螢幕所有詞彙！", "info");
+            
+                // 2. 遠端同步重置
+                if (firebaseRoomId) {
+                    try {
+                        const answersRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
+                        await firebaseSet(answersRef, null);
+                        showToast("已清空所有詞彙！", "info");
+                    } catch (error) {
+                        console.error("清空失敗:", error);
+                        showToast("清空失敗，請稍後再試", "error");
+                    }
+                }
             });
 
             // 視窗自適應
@@ -790,7 +803,7 @@
                     downloadBtn.className = "flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 active:scale-95";
                     
                     statusBadge.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 text-rose-600 text-sm font-medium border border-rose-100";
-                    statusText.innerText = `收集已鎖定 (頻道ID: ${peerInstance.id.substring(0,6).toUpperCase()})`;
+                    statusText.innerText = `收集已鎖定 (房號：${firebaseRoomId})`;
                 } else {
                     lockBtn.innerHTML = `<i class="fa-solid fa-lock-open"></i> 鎖定收集 (觀眾將無法再提交)`;
                     lockBtn.className = "flex-1 bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 shadow-md";
@@ -798,7 +811,7 @@
                     downloadBtn.className = "flex-1 bg-slate-200 text-slate-400 font-medium py-3 px-4 rounded-xl transition duration-150 flex items-center justify-center gap-2 cursor-not-allowed";
                     
                     statusBadge.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-sm font-medium border border-emerald-100";
-                    statusText.innerText = `即時連線中 (頻道ID: ${peerInstance.id.substring(0,6).toUpperCase()})`;
+                    statusText.innerText =`Firebase 即時同步中 (房號：${firebaseRoomId})`;
                 }
 
                 // 更新選中的主題標籤高亮
@@ -936,7 +949,7 @@
                 currentTheme = "modern";
             }
             document.getElementById('topic-input').value = topic;
-            broadcastConfig();
+            updateFirebaseConfig();
             handleConfigUpdate({ topic, theme: currentTheme, isLocked });
             renderWordsList();
             renderWordCloud();
