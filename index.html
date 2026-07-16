@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>互動即時文字雲 (P2P 安全免設定版)</title>
+    <title>互動即時文字雲 (Firebase 即時同步版)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
@@ -28,7 +28,7 @@
             update
         }
         from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-        
+        window.firebaseRemove = remove;
         
         // ===============================
         // Firebase 設定
@@ -127,8 +127,8 @@
                 <i class="fa-solid fa-cloud-word text-xl animate-pulse"></i>
             </div>
             <div>
-                <h1 class="font-bold text-xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">即時互動文字雲 <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold ml-1">P2P 安全版</span></h1>
-                <p class="text-xs text-slate-400">P2P Real-time Secured Interactive Word Cloud</p>
+                <h1 class="font-bold text-xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">即時互動文字雲 <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold ml-1">Firebase 即時版</span></h1>
+                <p class="text-xs text-slate-400">Firebase Realtime Interactive Word Cloud</p>
             </div>
         </div>
         
@@ -139,7 +139,7 @@
                     <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
                     <span class="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
                 </span>
-                <span id="status-text">安全通道啟動中...</span>
+                <span id="status-text">Firebase 連線中...</span>
             </div>
         </div>
     </header>
@@ -175,7 +175,7 @@
                 <div class="p-3 bg-white border border-slate-100 rounded-2xl shadow-inner mb-4 transition-all hover:scale-105 duration-300">
                     <div id="qrcode" class="w-[180px] h-[180px] flex flex-col items-center justify-center text-slate-400 text-xs">
                         <i class="fa-solid fa-spinner animate-spin text-3xl mb-1 block text-indigo-500"></i>
-                        等待產生安全二維碼...
+                        正在建立 Firebase 房間...
                     </div>
                 </div>
 
@@ -345,7 +345,7 @@
         
         <!-- 手機端腳註 -->
         <p class="text-center text-slate-400 text-xs mt-2">
-            互動文字雲系統 • P2P 端到端安全加密傳輸
+            互動文字雲系統 • Firebase Realtime Database
         </p>
     </main>
 
@@ -513,10 +513,6 @@
                             wordsMap[cleanWord] = (wordsMap[cleanWord] || 0) + 1;
                         }
                     });
-            
-                    // 觸發 UI 更新
-                    renderWordsList();
-                    renderWordCloud();
                 });
             }            
             /**
@@ -680,7 +676,6 @@
 
             // 隨機重排
             document.getElementById('redraw-btn').addEventListener('click', () => {
-                renderWordCloud();
                 showToast("已重新隨機編排版面！", "success");
             });
 
@@ -696,8 +691,6 @@
             document.getElementById('clear-all-btn').addEventListener('click', async () => {
                 // 1. 本地重置
                 wordsMap = {};
-                renderWordsList();
-                renderWordCloud();
             
                 // 2. 遠端同步重置
                 if (firebaseRoomId) {
@@ -714,7 +707,6 @@
 
             // 視窗自適應
             const resizeObserver = new ResizeObserver(() => {
-                renderWordCloud();
             });
             resizeObserver.observe(document.getElementById('canvas-container'));
 
@@ -766,7 +758,7 @@
             // 嚴格限制每個字詞最大長度為 15 字，防止大螢幕被撐開爆版
             const processedWords = newWords.map(w => w.substring(0, 15));
 
-            // 送出點對點 P2P 數據
+            // 傳送至 Firebase
             const success = sendAnswerToHost(processedWords);
             if (success) {
                 document.getElementById('user-success-overlay').classList.remove('hidden');
@@ -828,8 +820,6 @@
                         activeBtn.classList.add('border-indigo-400', 'text-indigo-600', 'bg-indigo-50');
                     }
                 }
-
-                renderWordCloud();
             } else {
                 // --- 手機端同步 UI 更新 ---
                 document.getElementById('user-topic').innerText = topic;
@@ -908,23 +898,67 @@
         // 手動增減權重
         window.modifyWeightDirectly = function(word, offset) {
             if (isLocked) return;
-            const newCount = (wordsMap[word] || 0) + offset;
-            if (newCount <= 0) {
-                delete wordsMap[word];
-            } else {
-                wordsMap[word] = newCount;
+        
+            const answersRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
+        
+            // +1：直接新增一筆記錄
+            if (offset > 0) {
+                firebasePush(answersRef, {
+                    word: word,
+                    time: Date.now()
+                });
+                return;
             }
-            renderWordsList();
-            renderWordCloud();
+        
+            // -1：查找並刪除一筆符合條件的記錄
+            // 使用 get() 比 onValue 更適合單次讀取操作
+            get(answersRef).then((snapshot) => {
+                if (!snapshot.exists()) return;
+        
+                let targetKey = null;
+                snapshot.forEach((item) => {
+                    if (!targetKey && item.val().word === word) {
+                        targetKey = item.key;
+                    }
+                });
+        
+                if (targetKey) {
+                    const itemRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers/${targetKey}`);
+                    firebaseRemove(itemRef);
+                }
+            }).catch((error) => {
+                console.error("修改權重失敗:", error);
+            });
         };
 
         // 後台刪除單字
-        window.deleteWordDirectly = function(word) {
+        window.deleteWordDirectly = async function(word) {
             if (isLocked) return;
-            delete wordsMap[word];
-            renderWordsList();
-            renderWordCloud();
-            showToast(`已將「${word}」完全移除`, "info");
+        
+            const answersRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers`);
+        
+            try {
+                const snapshot = await get(answersRef);
+                if (!snapshot.exists()) return;
+        
+                // 準備所有需要刪除的刪除任務
+                const deleteTasks = [];
+                snapshot.forEach((item) => {
+                    if (item.val().word === word) {
+                        const itemRef = firebaseRef(firebaseDB, `rooms/${firebaseRoomId}/answers/${item.key}`);
+                        deleteTasks.push(firebaseRemove(itemRef));
+                    }
+                });
+        
+                // 等待所有刪除操作完成
+                if (deleteTasks.length > 0) {
+                    await Promise.all(deleteTasks);
+                    showToast(`已刪除所有「${word}」記錄`, "info");
+                }
+            } catch (error) {
+                console.error("刪除詞彙失敗:", error);
+                showToast("刪除失敗，請稍後再試", "error");
+            }
         };
 
         // ==========================================
@@ -951,8 +985,6 @@
             document.getElementById('topic-input').value = topic;
             updateFirebaseConfig();
             handleConfigUpdate({ topic, theme: currentTheme, isLocked });
-            renderWordsList();
-            renderWordCloud();
             showToast("樣品資料載入完成！並已即時同步到所有觀眾手機！", "success");
         }
 
