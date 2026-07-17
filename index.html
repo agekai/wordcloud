@@ -880,19 +880,8 @@
                     activeBtn.classList.remove('border-transparent', 'text-slate-500', 'bg-slate-100');
                     if (currentTheme === 'fireshow') {
                         activeBtn.classList.add('border-amber-500', 'text-amber-500', 'bg-amber-50/10');
-                        const userTopic = document.getElementById("user-topic");
-                        userTopic.style.color = "#fff5b8";
-
-                        userTopic.style.textShadow = `
-                        0 0 4px #ffd700,
-                        0 0 10px #ffae00,
-                        0 0 18px #ff6a00,
-                        0 0 30px #ff3300;
                     } else {
                         activeBtn.classList.add('border-indigo-400', 'text-indigo-600', 'bg-indigo-50');
-                        const userTopic = document.getElementById("user-topic");
-                        userTopic.style.color = "";
-                        userTopic.style.textShadow = "";
                     }
                 }
 
@@ -918,12 +907,22 @@
                 const userFireIcon = document.getElementById('user-fire-icon');
 
                 if (currentTheme === 'fireshow') {
+                        const userTopic = document.getElementById("user-topic");
+                        userTopic.style.color = "#fff5b8";
+                        userTopic.style.textShadow = `
+                        0 0 4px #ffd700,
+                        0 0 10px #ffae00,
+                        0 0 18px #ff6a00,
+                        0 0 30px #ff3300;
                     userCard.className = "bg-[#140502] p-6 rounded-3xl shadow-2xl border border-amber-900/50 flex flex-col gap-6 transition-all duration-500 relative overflow-hidden text-white";
                     userStatusBadge.className = "text-xs font-bold text-amber-500 bg-amber-950/40 px-2.5 py-1 rounded-full flex items-center gap-1.5 border border-amber-900";
                     userSubmitBtn.className = "w-full bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-700 hover:to-amber-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-orange-950/50 transition duration-150 flex items-center justify-center gap-2 active:scale-95";
                     userFireIcon.classList.remove('hidden');
                     initUserFireshowParticles();
                 } else {
+                    const userTopic = document.getElementById("user-topic");
+                    userTopic.style.color = "";
+                    userTopic.style.textShadow = "";
                     userCard.className = "bg-white p-6 rounded-3xl shadow-xl border border-slate-100 flex flex-col gap-6 transition-all duration-500 relative overflow-hidden text-slate-800";
                     userStatusBadge.className = "text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm";
                     userSubmitBtn.className = "w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-indigo-100 transition duration-150 flex items-center justify-center gap-2 active:scale-95";
