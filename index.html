@@ -880,8 +880,19 @@
                     activeBtn.classList.remove('border-transparent', 'text-slate-500', 'bg-slate-100');
                     if (currentTheme === 'fireshow') {
                         activeBtn.classList.add('border-amber-500', 'text-amber-500', 'bg-amber-50/10');
+                        const userTopic = document.getElementById("user-topic");
+                        userTopic.style.color = "#fff5b8";
+
+                        userTopic.style.textShadow = `
+                        0 0 4px #ffd700,
+                        0 0 10px #ffae00,
+                        0 0 18px #ff6a00,
+                        0 0 30px #ff3300;
                     } else {
                         activeBtn.classList.add('border-indigo-400', 'text-indigo-600', 'bg-indigo-50');
+                        const userTopic = document.getElementById("user-topic");
+                        userTopic.style.color = "";
+                        userTopic.style.textShadow = "";
                     }
                 }
 
